@@ -155,11 +155,15 @@ class HumanPoseEstimator:
         pred2d = np.stack(result, axis=-1) * 255
 
         # Get absolute position (if desired)
+        is_predicted_to_be_in_fov = is_within_fov(pred2d)
+
+        # If less than 1/4 of the joints is visible, then the resulting pose will be weird
+        if is_predicted_to_be_in_fov.sum() < is_predicted_to_be_in_fov.size/4:
+            return None, None, None, None, None, None, None, None
+
+        # Move the skeleton into estimated absolute position if necessary
         if not just_root:
-            is_predicted_to_be_in_fov = is_within_fov(pred2d)
             pred3d = reconstruct_absolute(pred2d, pred3d, new_K, is_predicted_to_be_in_fov, weak_perspective=False)
-        else:
-            is_predicted_to_be_in_fov = None
 
         # Go back in original space (without augmentation and homography)
         pred3d = pred3d @ homo_inv
@@ -167,7 +171,7 @@ class HumanPoseEstimator:
         # pred2d_original = np.concatenate((pred2d, np.ones_like(pred2d)[..., :1]), axis=-1) @ homo_inv
         # pred2d_original = pred2d_original[..., :2]
         # TODO TRY 2
-        pred2d_original = np.concatenate((pred2d, np.ones_like(pred2d)[..., :1]), axis=-1) @ H
+        pred2d_original = np.concatenate((pred2d, np.ones_like(pred2d)[..., :1]), axis=-1) @ homo_inv
         pred2d_original = pred2d_original[..., :2]
         # TODO END TRY
 

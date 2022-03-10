@@ -86,9 +86,9 @@ class TemporalCrossTransformer(nn.Module):
         # unique_labels = support_labels
 
         # init tensor to hold distances between every support tuple and every target tuple
-        all_distances_tensor = torch.zeros(n_queries, self.args.way).cuda()
-
-        for c in support_labels[0]:
+        # all_distances_tensor = torch.zeros(n_queries, self.args.way).cuda()
+        all_distances_tensor = []
+        for c in support_labels:
             # select keys and values for just this class
             class_k = torch.index_select(mh_support_set_ks, 0, self._extract_class_indices(support_labels, c))
             class_v = torch.index_select(mh_support_set_vs, 0, self._extract_class_indices(support_labels, c))
@@ -99,10 +99,20 @@ class TemporalCrossTransformer(nn.Module):
 
             # reshape etc. to apply a softmax for each query tuple
             class_scores = class_scores.permute(0, 2, 1, 3)
-            class_scores = class_scores.reshape(n_queries, self.tuples_len, -1)
-            class_scores = [self.class_softmax(class_scores[i]) for i in range(n_queries)]
-            class_scores = torch.cat(class_scores)
-            class_scores = class_scores.reshape(n_queries, self.tuples_len, -1, self.tuples_len)
+            class_scores = class_scores.reshape(n_queries, self.tuples_len, self.tuples_len)  # -1
+
+            # TODO BEFORE
+            # class_scores_real = self.class_softmax(class_scores[0])
+            # TODO NEW
+            max_along_axis = class_scores[0].max(dim=1, keepdim=True).values
+            exponential = torch.exp(class_scores[0] - max_along_axis)
+            denominator = torch.sum(exponential, dim=1, keepdim=True)
+            denominator = denominator.repeat(1, self.tuples_len)
+            class_scores = torch.div(exponential, denominator)
+            # TODO END
+
+            # class_scores = torch.cat(class_scores)
+            class_scores = class_scores.reshape(n_queries, self.tuples_len, 1, self.tuples_len)  # -1
             class_scores = class_scores.permute(0, 2, 1, 3)
 
             # get query specific class prototype
@@ -116,10 +126,12 @@ class TemporalCrossTransformer(nn.Module):
 
             # multiply by -1 to get logits
             distance = distance * -1
-            c_idx = c.long()
-            all_distances_tensor[:, c_idx] = distance
+            all_distances_tensor.append(distance)
+            # c_idx = c.long()
+            # all_distances_tensor[:, c_idx] = 1  # distance
+            # all_distances_tensor = all_distances_tensor + c_idx + distance
 
-        return_dict = {'logits': all_distances_tensor}
+        return_dict = {'logits': torch.stack(all_distances_tensor, dim=1)}
 
         return return_dict
 
@@ -131,6 +143,7 @@ class TemporalCrossTransformer(nn.Module):
         :param which_class: Label for which indices are extracted.
         :return: (torch.tensor) Indices in the form of a mask that indicate the locations of the specified label.
         """
+        return which_class.reshape((-1,))
         class_mask = torch.eq(labels, which_class)  # binary mask of labels equal to which_class
         class_mask_indices = torch.nonzero(class_mask)  # indices of labels equal to which class
         return torch.reshape(class_mask_indices, (-1,))  # reshape to be a 1D vector

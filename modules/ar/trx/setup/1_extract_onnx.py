@@ -14,9 +14,9 @@ if __name__ == "__main__":
     input_names = ["support", "labels", "query"]
     output_names = ['pred']
 
-    support = torch.randn((1, args.way * args.seq_len, args.n_joints * 3), requires_grad=True).to(args.device)
-    query = torch.randn((1, args.seq_len, args.n_joints * 3), requires_grad=True).to(args.device)
-    labels = torch.IntTensor(np.array([list(range(args.way))])).to(args.device)
+    support = torch.randn((args.way * args.seq_len, args.n_joints * 3)).to(args.device)
+    query = torch.randn((args.seq_len, args.n_joints * 3)).to(args.device)
+    labels = torch.IntTensor(np.array(list(range(args.way)))).to(args.device)
 
     res = model(support, labels, query)  # Check that arguments are good
 
@@ -40,5 +40,7 @@ if __name__ == "__main__":
     res_onnx = sess.run(None, {'support': support.cpu().detach().numpy(),
                                "labels": labels.cpu().detach().numpy(),
                                "query": query.cpu().detach().numpy()})
+    res_onnx = res_onnx[0]
+    res_pytorch = res_pytorch['logits'].detach().cpu().numpy()
 
     pass

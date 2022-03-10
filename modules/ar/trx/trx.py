@@ -5,6 +5,9 @@ import time
 from modules.ar.trx.utils.model import CNN_TRX
 import torch
 
+from utils.matplotlib_visualizer import MPLPosePrinter
+from utils.params import TRXConfig
+
 
 class ActionRecognizer:
     def __init__(self, args, trt=False):
@@ -45,7 +48,7 @@ class ActionRecognizer:
         poses = torch.stack(self.previous_frames).reshape(self.seq_len, -1).to(self.device)
         with torch.no_grad():
             labels = list(range(len(self.support_labels)))
-            labels = torch.FloatTensor(labels).to(self.device)
+            labels = torch.IntTensor(labels).to(self.device)
             ss = self.support_set.reshape(-1, 90)
             output = self.model(ss, labels, poses)  # add batch dimension and give to model
 
@@ -111,88 +114,86 @@ class ActionRecognizer:
         print('Onnx model exporting done')
         return onnx_file_name
 
+# SPEED
+# if __name__ == "__main__":
+#     from utils.params import TRXConfig
+#     from tqdm import tqdm
+#     from modules.hpe.hpe import HumanPoseEstimator
+#     from utils.params import MetrabsTRTConfig, RealSenseIntrinsics
+#
+#     ar = ActionRecognizer(TRXConfig())
+#     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
+#
+#     ar.train((np.random.rand(16, 30, 3), "one"))
+#     ar.train((np.random.rand(16, 30, 3), "two"))
+#     ar.train((np.random.rand(16, 30, 3), "three"))
+#     ar.train((np.random.rand(16, 30, 3), "four"))
+#     ar.train((np.random.rand(16, 30, 3), "five"))
+#
+#     p = np.random.rand(30, 3)
+#
+#     for _ in tqdm(range(1000)):
+#         start = time.time()
+#         ar.inference(p)
+#         end = time.time()
+#         print(end - start)  # SPEED
 
-if __name__ == "__main__":
-    from utils.params import TRXConfig
-    from tqdm import tqdm
-    from modules.hpe.hpe import HumanPoseEstimator
-    from utils.params import MetrabsTRTConfig, RealSenseIntrinsics
+
+if __name__ == "__main__":  # P
+    import json
+
+    with open('assets/skeleton_types.pkl', "rb") as input_file:
+        skeleton_types = pickle.load(input_file)
+    skeleton = 'smpl+head_30'
+    edges = skeleton_types[skeleton]['edges']
 
     ar = ActionRecognizer(TRXConfig())
-    ar.export_onnx()
-    exit()
+    vis = MPLPosePrinter()
 
-    h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
+    with open("models/fake_data/shake_head.json", "rb") as infile:
+        query = json.load(infile)
+        query = np.array(query)[:, skeleton_types[skeleton]['indices'], :]/2200.  # Normalize
+        query -= query[:, 0][:, None, :]  # Center
+        query = torch.FloatTensor(query).cuda()
+        for elem in query:
+            vis.print_pose(elem.reshape(30, 3).detach().cpu().numpy(), edges)
+            time.sleep(0.2)
+        time.sleep(1)
 
-    ar.train((np.random.rand(16, 30, 3), "one"))
-    ar.train((np.random.rand(16, 30, 3), "two"))
-    ar.train((np.random.rand(16, 30, 3), "three"))
-    ar.train((np.random.rand(16, 30, 3), "four"))
-    ar.train((np.random.rand(16, 30, 3), "five"))
+    with open("models/fake_data/pick2.json", "rb") as infile:
+        s1 = json.load(infile)
+        s1 = np.array(s1)[:, skeleton_types[skeleton]['indices'], :]/2200.
+        s1 -= s1[:, 0][:, None, :]  # Center
+        s1 = torch.FloatTensor(s1).cuda()
+        ar.train((s1, "pick"))
 
-    p = np.random.rand(30, 3)
+    with open("models/fake_data/pointing.json", "rb") as infile:
+        s2 = json.load(infile)
+        s2 = np.array(s2)[:, skeleton_types[skeleton]['indices'], :]/2200.
+        s2 -= s2[:, 0][:, None, :]  # Center
+        s2 = torch.FloatTensor(s2).cuda()
+        ar.train((s2, "pointing"))
 
-    for _ in tqdm(range(1000)):
-        start = time.time()
-        ar.inference(p)
-        end = time.time()
-        print(end - start)
+    with open("models/fake_data/throw.json", "rb") as infile:
+        s3 = json.load(infile)
+        s3 = np.array(s3)[:, skeleton_types[skeleton]['indices'], :]/2200.
+        s3 -= s3[:, 0][:, None, :]  # Center
+        s3 = torch.FloatTensor(s3).cuda()
+        ar.train((s3, "throw"))
 
+    with open("models/fake_data/shake_head2.json", "rb") as infile:
+        s4 = json.load(infile)
+        s4 = np.array(s4)[:, skeleton_types[skeleton]['indices'], :]/2200.
+        s4 -= s4[:, 0][:, None, :]  # Center
+        s4 = torch.FloatTensor(s4).cuda()
+        ar.train((s4, "shake_head"))
 
-# if __name__ == "__main__":
-#
-#     with open('assets/skeleton_types.pkl', "rb") as input_file:
-#         skeleton_types = pickle.load(input_file)
-#     skeleton = 'smpl+head_30'
-#     edges = skeleton_types[skeleton]['edges']
-#
-#     ar = ActionRecognizer()
-#     vis = PosePrinter(640, 480, just_pose=True)
-#
-#     with open("models/fake_data/shake_head.json", "rb") as infile:
-#         query = json.load(infile)
-#         query = np.array(query)[:, skeleton_types[skeleton]['indices'], :]/2200.  # Normalize
-#         query -= query[:, 0][:, None, :]  # Center
-#         query = torch.FloatTensor(query).cuda()
-#         for elem in query:
-#             vis.print_pose(elem.reshape(30, 3).detach().cpu().numpy(), edges)
-#             time.sleep(0.2)
-#         time.sleep(1)
-#
-#     with open("models/fake_data/pick2.json", "rb") as infile:
-#         s1 = json.load(infile)
-#         s1 = np.array(s1)[:, skeleton_types[skeleton]['indices'], :]/2200.
-#         s1 -= s1[:, 0][:, None, :]  # Center
-#         s1 = torch.FloatTensor(s1).cuda()
-#         ar.train((s1, "pick"))
-#
-#     with open("models/fake_data/pointing.json", "rb") as infile:
-#         s2 = json.load(infile)
-#         s2 = np.array(s2)[:, skeleton_types[skeleton]['indices'], :]/2200.
-#         s2 -= s2[:, 0][:, None, :]  # Center
-#         s2 = torch.FloatTensor(s2).cuda()
-#         ar.train((s2, "pointing"))
-#
-#     with open("models/fake_data/throw.json", "rb") as infile:
-#         s3 = json.load(infile)
-#         s3 = np.array(s3)[:, skeleton_types[skeleton]['indices'], :]/2200.
-#         s3 -= s3[:, 0][:, None, :]  # Center
-#         s3 = torch.FloatTensor(s3).cuda()
-#         ar.train((s3, "throw"))
-#
-#     with open("models/fake_data/shake_head2.json", "rb") as infile:
-#         s4 = json.load(infile)
-#         s4 = np.array(s4)[:, skeleton_types[skeleton]['indices'], :]/2200.
-#         s4 -= s4[:, 0][:, None, :]  # Center
-#         s4 = torch.FloatTensor(s4).cuda()
-#         ar.train((s4, "shake_head"))
-#
-#     with open("models/fake_data/hand_waving.json", "rb") as infile:
-#         s5 = json.load(infile)
-#         s5 = np.array(s5)[:, skeleton_types[skeleton]['indices'], :]/2200.
-#         s5 -= s5[:, 0][:, None, :]  # Center
-#         s5 = torch.FloatTensor(s5).cuda()
-#         ar.train((s5, "hand_waving"))
-#
-#     for elem in query:
-#         print(ar.inference(elem))
+    with open("models/fake_data/hand_waving.json", "rb") as infile:
+        s5 = json.load(infile)
+        s5 = np.array(s5)[:, skeleton_types[skeleton]['indices'], :]/2200.
+        s5 -= s5[:, 0][:, None, :]  # Center
+        s5 = torch.FloatTensor(s5).cuda()
+        ar.train((s5, "hand_waving"))
+
+    for elem in query:
+        print(ar.inference(elem))
