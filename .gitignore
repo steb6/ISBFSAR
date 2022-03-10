@@ -1,0 +1,17 @@
+.idea
+__pycache__
+
+# general
+*.mp4*
+
+# modules hpe
+modules/hpe/modules/engines/*
+modules/hpe/modules/numpy/*
+modules/hpe/modules/onnxs/*
+modules/hpe/modules/raws/*
+modules/hpe/modules/signatured/*
+modules/hpe/assets/*
+
+# ar
+modules/ar/lstm/data/*
+modules/ar/trx/checkpoints/*
