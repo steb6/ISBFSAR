@@ -150,8 +150,9 @@ class ISBFSAR:
                 # Print action
                 i = 0
                 if results is not None:
+                    m = max(results.values())
                     for r in results.keys():
-                        if results[r] > 0.5:
+                        if results[r] == m:
                             color = (0, 255, 0)
                         else:
                             color = (255, 0, 0)
@@ -254,10 +255,12 @@ class ISBFSAR:
 
             playsound('assets' + os.sep + 'start.wav')
             poses = []
-            for _ in tqdm(range(self.window_size), position=0, leave=True):
-                _, pose, _ = self.get_frame()
-                if pose is not None:
-                    poses.append(pose)
+            with tqdm(total=self.window_size, position=0, leave=True) as progress_bar:
+                while len(poses) < self.window_size:
+                    _, pose, _ = self.get_frame()
+                    if pose is not None:
+                        poses.append(pose)
+                        progress_bar.update()
             playsound('assets' + os.sep + 'stop.wav')
         # If a path to a video is provided
         else:
