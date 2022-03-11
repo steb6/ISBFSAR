@@ -37,5 +37,12 @@ class MPLPosePrinter:
                     self.ax.plot([a[0], b[0]], [a[1], b[1]], [a[2], b[2]], color)
         plt.draw()
 
+    @staticmethod
+    def sleep(t):
+        plt.pause(t)
+
     def clear(self):
         self.ax.lines.clear()
+
+    def set_title(self, title):
+        self.ax.set_title(title)

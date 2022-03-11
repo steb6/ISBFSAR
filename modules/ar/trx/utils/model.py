@@ -194,13 +194,18 @@ class CNN_TRX(nn.Module):
 
         context_features = context_features.reshape(-1, self.args.seq_len, dim)
         target_features = target_features.reshape(-1, self.args.seq_len, dim)
+        # TODO NEW
+        all_logits = [self.transformers[0](context_features, context_labels, target_features)['logits']]
+        # TODO OLD
+        # all_logits = [t(context_features, context_labels, target_features)['logits'] for t in self.transformers]
+        # TODO END
+        all_logits = torch.stack(all_logits, dim=-1)  # NOW THIS LINE CAUSES PROBLEM (?)
 
-        all_logits = [t(context_features, context_labels, target_features)['logits'] for t in self.transformers]
-        all_logits = torch.stack(all_logits, dim=-1)
         sample_logits = all_logits
-        sample_logits = torch.mean(sample_logits, dim=[-1])
 
-        return_dict = {'logits': split_first_dim_linear(sample_logits, [NUM_SAMPLES, target_features.shape[0]])}
+        sample_logits = torch.mean(sample_logits, dim=2)  # THIS LINE CAUSES PROBLEM (?)
+
+        return_dict = {'logits': sample_logits}
         return return_dict
 
     def distribute_model(self):

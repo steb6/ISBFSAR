@@ -2,13 +2,10 @@ import numpy as np
 from polygraphy.backend.trt import CreateConfig, EngineFromNetwork, NetworkFromOnnxPath, SaveEngine, TrtRunner, Profile
 
 
-BATCH_SIZE = 1
-
-
-def create_engine(profiles, in_path, out_path, inputs):
+def create_engine(in_path, out_path, inputs):
     build_engine = EngineFromNetwork(
         NetworkFromOnnxPath(in_path),
-        config=CreateConfig(fp16=True, max_workspace_size=10000 << 20)  # profiles=profiles,
+        config=CreateConfig(fp16=True, max_workspace_size=7 << 20)  # profiles=profiles,
     )
     build_engine = SaveEngine(build_engine, path=out_path)
 
@@ -21,17 +18,9 @@ def create_engine(profiles, in_path, out_path, inputs):
 
 
 if __name__ == "__main__":
-    # TRX USA ROSASCO METHOD
-    p = [
-        Profile().add("support", min=(80, 90), opt=(80, 90), max=(80, 90)),
-        Profile().add("query", min=(16, 90), opt=(16, 90), max=(16, 90)),
-        Profile().add("labels", min=(5), opt=(5), max=(5))
-    ]
-    i = {"image": np.ones(shape=(80, 90), dtype=float),
-         "query": np.ones(shape=(16, 90), dtype=float),
+    i = {"support": np.ones(shape=(80, 90), dtype=np.float32),
+         "query": np.ones(shape=(16, 90), dtype=np.float32),
          "labels": np.ones(shape=(5), dtype=int)}
-    create_engine(p,
-                  'modules/ar/trx/checkpoints/trx.onnx',
-                  'modules/ar/trx/checkpoints/trx.engine',
+    create_engine('modules/ar/trx/modules/onnxs/trx.onnx',
+                  'modules/ar/trx/modules/engines/trx.engine',
                   i)
-

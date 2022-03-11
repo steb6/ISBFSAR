@@ -40,8 +40,9 @@ class RealSenseIntrinsics(object):
 
 class TRXConfig(object):
     def __init__(self):
-        self.model_path = 'modules/ar/trx/checkpoints/671.pth'
-        self.trans_linear_in_dim = 512
+        self.model_path = 'modules/ar/trx/modules/raws/671.pth'
+        self.trt_path = 'modules/ar/trx/modules/engines/trx.engine'
+        self.trans_linear_in_dim = 256
         self.trans_linear_out_dim = 128
         self.way = 5
         self.shot = 1
@@ -50,7 +51,7 @@ class TRXConfig(object):
         self.seq_len = seq_len
         self.n_joints = n_joints
         self.num_gpus = 1
-        self.temp_set = [2, 3]
+        self.temp_set = [2]
         self.device = 'cuda'
 
 

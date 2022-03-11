@@ -4,9 +4,9 @@ import torch
 from torch.optim.lr_scheduler import MultiStepLR
 import wandb
 from tqdm import tqdm
-from utils.dataloader import MetrabsData
-from utils.misc import aggregate_accuracy, loss_fn
-from utils.model import CNN_TRX
+from modules.ar.trx.utils.dataloader import MetrabsData
+from modules.ar.trx.utils.misc import aggregate_accuracy, loss_fn
+from modules.ar.trx.utils.model import CNN_TRX
 from utils.params import TRXConfig
 
 
@@ -32,9 +32,9 @@ if __name__ == "__main__":
 
     data_path = "D:\\nturgbd_metrabs" if 'Users' in os.getcwd() else "../nturgbd_metrabs"  # TODO ADJUST
     train_data = MetrabsData(data_path, k=5, mode='train', n_task=10000)
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=1, num_workers=2)
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=1, num_workers=12)
     valid_data = MetrabsData(data_path, k=5, mode='valid', n_task=1000)
-    valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=1, num_workers=2)
+    valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=1, num_workers=12)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-2)
     optimizer.zero_grad()
@@ -42,8 +42,6 @@ if __name__ == "__main__":
 
     run = wandb.init(project="trx")
     wandb.watch(model, log='all', log_freq=log_every)
-
-    # artifact = wandb.Artifact(datetime.now().strftime("%d_%m_%Y-%H_%M"), type='model')  # TODO OR JUST MODEL?
 
     for epoch in range(10000):
 
@@ -58,7 +56,7 @@ if __name__ == "__main__":
 
             support_set = support_set.reshape(args.way * args.seq_len, args.n_joints * 3).cuda().float()
             target_set = target_set.reshape(args.seq_len, args.n_joints * 3).cuda().float()
-            support_labels = support_labels.reshape(args.way).cuda().float()
+            support_labels = support_labels.reshape(args.way).cuda().int()
             target_label = target_label.cuda()
 
             out = model(support_set, support_labels, target_set)
@@ -67,7 +65,7 @@ if __name__ == "__main__":
             target = torch.zeros_like(support_labels)
             target[target_label.item()] = 1.
 
-            train_loss = loss_fn(pred, target.unsqueeze(0), 'cuda')
+            train_loss = loss_fn(pred.unsqueeze(0), target.unsqueeze(0), 'cuda')
             # loss = loss / 16
             train_loss.backward(retain_graph=False)
             train_losses.append(train_loss.item())
@@ -97,7 +95,7 @@ if __name__ == "__main__":
 
             support_set = support_set.reshape(args.way * args.seq_len, args.n_joints * 3).cuda().float()
             target_set = target_set.reshape(args.seq_len, args.n_joints * 3).cuda().float()
-            support_labels = support_labels.reshape(args.way).cuda().float()
+            support_labels = support_labels.reshape(args.way).cuda().int()
             target_label = target_label.cuda()
 
             out = model(support_set, support_labels, target_set)
@@ -106,7 +104,7 @@ if __name__ == "__main__":
             target = torch.zeros_like(support_labels)
             target[target_label.item()] = 1.
 
-            valid_loss = loss_fn(pred, target.unsqueeze(0), 'cuda')
+            valid_loss = loss_fn(pred.unsqueeze(0), target.unsqueeze(0), 'cuda')
             valid_losses.append(valid_loss.item())
 
             valid_accuracy = aggregate_accuracy(pred, target_label)

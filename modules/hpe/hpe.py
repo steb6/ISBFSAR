@@ -61,7 +61,7 @@ class HumanPoseEstimator:
         self.head_weights = np.load(model_config.head_weight_path)
         self.heads_bias = np.load(model_config.head_bias_path)
 
-    def estimate(self, frame, just_root=False):
+    def estimate(self, frame):
         # Preprocess for yolo
         square_img = cv2.resize(frame, (256, 256), fx=1.0, fy=1.0, interpolation=cv2.INTER_AREA)
         yolo_in = copy.deepcopy(square_img)
@@ -161,12 +161,12 @@ class HumanPoseEstimator:
         if is_predicted_to_be_in_fov.sum() < is_predicted_to_be_in_fov.size/4:
             return None, None, None, None, None, None, None, None
 
-        # Move the skeleton into estimated absolute position if necessary
-        if not just_root:
-            pred3d = reconstruct_absolute(pred2d, pred3d, new_K, is_predicted_to_be_in_fov, weak_perspective=False)
+        # Move the skeleton into estimated absolute position if necessary  # TODO ADD AGAIN
+        # pred3d = reconstruct_absolute(pred2d, pred3d, new_K, is_predicted_to_be_in_fov, weak_perspective=False)
 
         # Go back in original space (without augmentation and homography)
         pred3d = pred3d @ homo_inv
+
         # TODO TRY 1
         # pred2d_original = np.concatenate((pred2d, np.ones_like(pred2d)[..., :1]), axis=-1) @ homo_inv
         # pred2d_original = pred2d_original[..., :2]
@@ -218,9 +218,10 @@ if __name__ == "__main__":
     for _ in tqdm(range(10000)):
         ret, img = cap.read()
         pose3d, ed, bbone_input, pose2d, _, _, _, _ = h.estimate(img, just_root=True)
-        pose3d -= pose3d[0]  # Center
+        if pose3d is not None:
+            pose3d -= pose3d[0]  # Center
 
-        pose_visualizer.clear()
-        pose_visualizer.print_pose(pose3d, ed)
-        cv2.imshow("rgb", img)
-        plt.pause(0.001)
+            pose_visualizer.clear()
+            pose_visualizer.print_pose(pose3d, ed)
+            cv2.imshow("rgb", img)
+            plt.pause(0.001)

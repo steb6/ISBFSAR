@@ -1,4 +1,3 @@
-import json
 import os
 import pickle
 import torch.utils.data as data
@@ -14,10 +13,9 @@ class MetrabsData(data.Dataset):
         self.k = k
         self.classes = next(os.walk(self.path))[1]  # Get list of directories
 
-        for elem in self.classes:
-            if 'other_person' in elem:
-                self.classes.remove(elem)
-        self.classes.remove('handshaking')
+        # self.classes = list(filter(lambda x: 'other_person' not in x, self.classes))
+        # self.classes = list(filter(lambda x: 'each_other' not in x, self.classes))
+        # self.classes.remove('handshaking')
 
         self.debug_classes = debug_classes
 
@@ -38,21 +36,22 @@ class MetrabsData(data.Dataset):
         # path = sequences[0]  # TODO REMOVE DEBUG
         path = os.path.join(self.path, self.classes[id], path)
         with open(path, 'rb') as file:
-            elem = json.load(file)
-        elem = np.array(elem)[:, self.skeleton_types[self.skeleton]['indices'], :]
+            elem = pickle.load(file)
+        # elem = elem[:, self.skeleton_types[self.skeleton]['indices'], :]
         return elem
 
     def __getitem__(self, idx):  # Must return complete, imp_x and impl_y
-        # support_classes = [0, 1, 2, 3, 4]  # TODO REMOVE DEBUG
-        # target_class = np.array(2)  # TODO REMOVE DEBUG
         support_classes = random.sample(range(0, self.n_classes), self.k)
         target_class = np.array(random.sample(support_classes, 1)[0])
 
-        support_set = np.array([self.get_random_video(cl) for cl in support_classes])/2200.  # TODO PARAMETRIZE
-        target_set = self.get_random_video(target_class)/2200.  # TODO PARAMETRIZE
+        support_set = np.array([self.get_random_video(cl) for cl in support_classes])
+        target_set = self.get_random_video(target_class)
+
+        support_set = support_set - support_set[..., :1, :]
+        target_set = target_set - target_set[..., :1, :]
 
         if self.debug_classes:
-            return support_set, target_set, np.array(support_classes), np.array(target_class)
+            return support_set, target_set, np.array(support_classes), target_class
         else:
             return support_set, target_set, np.array(range(0, self.k)), np.array(support_classes.index(target_class))
 

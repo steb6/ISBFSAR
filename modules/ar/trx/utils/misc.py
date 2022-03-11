@@ -117,7 +117,7 @@ def split_first_dim_linear(x, first_two_dims):
     new_shape = first_two_dims
     if len(x_shape) > 1:
         new_shape += [x_shape[-1]]
-    return x.view(new_shape)
+    return x.reshape(new_shape)
 
 
 def sample_normal(mean, var, num_samples):
@@ -155,10 +155,12 @@ def aggregate_accuracy(test_logits_sample, test_labels):
     averaged_predictions = torch.logsumexp(test_logits_sample, dim=0)
     return torch.mean(torch.eq(test_labels, torch.argmax(averaged_predictions, dim=-1)).float())
 
+
 def task_confusion(test_logits, test_labels, real_test_labels, batch_class_list):
     preds = torch.argmax(torch.logsumexp(test_logits, dim=0), dim=-1)
     real_preds = batch_class_list[preds]
     return real_preds
+
 
 def linear_classifier(x, param_dict):
     """
@@ -177,6 +179,6 @@ def loss_fn(test_logits_sample, test_labels, device):
 
     log_py = torch.empty(size=(size[0], size[1]), dtype=torch.float, device=device)
     for sample in range(sample_count):
-        log_py[sample] = -F.cross_entropy(test_logits_sample[sample], test_labels, reduction='none')
+        log_py[sample] = -F.cross_entropy(test_logits_sample[sample], test_labels.float(), reduction='none')
     score = torch.logsumexp(log_py, dim=0) - torch.log(num_samples)
     return -torch.sum(score, dim=0)

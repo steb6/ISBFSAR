@@ -3,6 +3,7 @@ __pycache__
 
 # general
 *.mp4*
+wandb
 
 # modules hpe
 modules/hpe/modules/engines/*
@@ -14,4 +15,6 @@ modules/hpe/assets/*
 
 # ar
 modules/ar/lstm/data/*
-modules/ar/trx/checkpoints/*
+modules/ar/trx/modules/engines/*
+modules/ar/trx/modules/onnxs/*
+modules/ar/trx/modules/raws/*

@@ -3,6 +3,7 @@ from multiprocessing.connection import Listener
 import numpy as np
 from tqdm import tqdm
 import time
+from modules.ar.trx.trx_trt import ActionRecognizer
 from utils.input import JustText
 import cv2
 from playsound import playsound
@@ -10,6 +11,7 @@ from utils.input import RealSense
 from utils.matplotlib_visualizer import MPLPosePrinter as PosePrinter
 from modules.hpe.hpe import HumanPoseEstimator
 from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig
+from utils.params import TRXConfig
 # from utils.params import TRXConfig, LSTMTrainConfig  # TODO MODIFY
 # if MainConfig().ar == "lstm":
 #     from modules.ar.lstm.lstm import ActionRecognizer
@@ -81,7 +83,7 @@ class ISBFSAR:
             # pose = pose / self.skeleton_scale  # Normalize  (MetrABS is a cube with sides of 2.2 M)
 
         # Make inference
-        results = None  # self.ar.inference(pose) TODO MODIFY
+        results = self.ar.inference(pose3d_root)
 
         # TODO START EXPERIMENT
         # Print movement value
@@ -131,12 +133,12 @@ class ISBFSAR:
                 #     cv2.putText(img, "Mv: " + '%.2f' % m, (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2,
                 #                 cv2.LINE_AA)
 
-                # Print 2d results on original frame
-                if is_fov is not None:
-                    for point, is_f in zip(pose2d_img, is_fov):
-                        p = (int(bbox[0] * 640 + point[0]), int(bbox[1] * 480 + point[1]))
-                        c = (0, 255, 0) if is_f else (0, 0, 255)
-                        img = cv2.circle(img, p, 5, c, 2)
+                # # Print 2d results on original frame
+                # if is_fov is not None:
+                #     for point, is_f in zip(pose2d_img, is_fov):
+                #         p = (int(bbox[0] * 640 + point[0]), int(bbox[1] * 480 + point[1]))
+                #         c = (0, 255, 0) if is_f else (0, 0, 255)
+                #         img = cv2.circle(img, p, 5, c, 2)
 
                 # Print 2d results on bbone input
                 if is_fov is not None:
@@ -298,7 +300,7 @@ class ISBFSAR:
 if __name__ == "__main__":
 
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
-    n = None  # ActionRecognizer(TRXConfig() if MainConfig().ar == "trx" else LSTMTrainConfig())
+    n = ActionRecognizer(TRXConfig())
     t = JustText(MainConfig().just_text_port)
 
     master = ISBFSAR(h, n, t, MainConfig(), debug=True)
