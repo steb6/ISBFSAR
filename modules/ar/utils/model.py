@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from itertools import combinations
 from torch.autograd import Variable
-from modules.ar.trx.utils.misc import split_first_dim_linear
+
 
 NUM_SAMPLES = 1
 

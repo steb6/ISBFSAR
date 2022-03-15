@@ -4,9 +4,9 @@ import torch
 from torch.optim.lr_scheduler import MultiStepLR
 import wandb
 from tqdm import tqdm
-from modules.ar.trx.utils.dataloader import MetrabsData
-from modules.ar.trx.utils.misc import aggregate_accuracy, loss_fn
-from modules.ar.trx.utils.model import CNN_TRX
+from modules.ar.utils.dataloader import MetrabsData
+from modules.ar.utils.misc import aggregate_accuracy, loss_fn
+from modules.ar.utils.model import CNN_TRX
 from utils.params import TRXConfig
 
 

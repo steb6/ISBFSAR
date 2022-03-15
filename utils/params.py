@@ -1,3 +1,5 @@
+import os
+
 seq_len = 16
 n_joints = 30
 
@@ -40,8 +42,8 @@ class RealSenseIntrinsics(object):
 
 class TRXConfig(object):
     def __init__(self):
-        self.model_path = 'modules/ar/trx/modules/raws/671.pth'
-        self.trt_path = 'modules/ar/trx/modules/engines/fix_trx.engine'
+        self.data_path = "D:\\nturgbd_metrabs_2/" if 'Users' in os.getcwd() else "nturgbd_metrabs/"
+        self.trt_path = 'modules/ar/modules/engines/fix_trx.engine'
         self.trans_linear_in_dim = 256
         self.trans_linear_out_dim = 128
         self.way = 5
@@ -53,16 +55,3 @@ class TRXConfig(object):
         self.num_gpus = 1
         self.temp_set = [2]
         self.device = 'cuda'
-
-
-class LSTMTrainConfig(object):
-    def __init__(self):
-        self.hidden_size = 128
-        self.n_epochs = 5
-        self.augmentation_factor = 100
-        self.augmentation_noise = 0.01
-        self.validation_size = 0.3
-        self.patience = 5
-        self.seq_len = seq_len
-        self.device = 'cuda'
-        self.n_joints = n_joints

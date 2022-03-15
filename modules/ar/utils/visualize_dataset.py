@@ -1,14 +1,12 @@
-import json
-import os
 import pickle
-import time
 import torch
 from tqdm import tqdm
 from dataloader import MetrabsData
 from utils.matplotlib_visualizer import MPLPosePrinter as PosePrinter
+from utils.params import TRXConfig
 
 if __name__ == "__main__":
-    data_path = "D:\\nturgbd_metrabs_2" if 'Users' in os.getcwd() else "nturgbd_metrabs"
+    data_path = TRXConfig().data_path
     data = MetrabsData(data_path, k=5, mode='train', n_task=10000, debug_classes=True)
     train_loader = torch.utils.data.DataLoader(data, batch_size=1, num_workers=2)
 

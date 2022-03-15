@@ -3,7 +3,7 @@ from multiprocessing.connection import Listener
 import numpy as np
 from tqdm import tqdm
 import time
-from modules.ar.trx.trx_trt import ActionRecognizer
+from modules.ar.trx import ActionRecognizer
 from utils.input import JustText
 import cv2
 from playsound import playsound

@@ -16,7 +16,7 @@ modules/hpe/modules/signatured/*
 modules/hpe/assets/*
 
 # ar
-modules/ar/lstm/data/*
-modules/ar/trx/modules/engines/*
-modules/ar/trx/modules/onnxs/*
-modules/ar/trx/modules/raws/*
+modules/ar/data/*
+modules/ar/modules/engines/*
+modules/ar/modules/onnxs/*
+modules/ar/modules/raws/*
