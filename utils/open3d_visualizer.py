@@ -1,6 +1,4 @@
-import cv2
 import numpy as np
-from matplotlib import pyplot as plt
 import open3d
 from open3d.cpu.pybind.geometry import PointCloud, LineSet
 from open3d.cpu.pybind.utility import Vector3dVector, Vector2iVector
@@ -92,52 +90,3 @@ class PosePrinter:
         # self.vis.update_geometry(self.sphere)
         self.vis.poll_events()
         self.vis.update_renderer()
-
-
-def line_between(xs, ys, a, b, style):
-    plt.plot((xs[a], xs[b]), (ys[a], ys[b]), style)
-
-
-def print_points(points):  # 1 x 17 x 2, coordinates inverted
-
-    plt.figure(1)
-    plt.clf()
-
-    plt.scatter(points[..., 1], points[..., 0])
-    pose_x = points[:, 1]
-    pose_y = points[:, 0]
-    # face
-    line_between(pose_x, pose_y, 0, 1, 'b')
-    line_between(pose_x, pose_y, 0, 2, 'b')
-    line_between(pose_x, pose_y, 1, 3, 'b')
-    line_between(pose_x, pose_y, 2, 4, 'b')
-    # legs
-    line_between(pose_x, pose_y, 14, 16, 'b')
-    line_between(pose_x, pose_y, 13, 15, 'b')
-    line_between(pose_x, pose_y, 14, 12, 'b')
-    line_between(pose_x, pose_y, 13, 11, 'b')
-    # body
-    line_between(pose_x, pose_y, 11, 5, 'b')
-    line_between(pose_x, pose_y, 5, 6, 'b')
-    line_between(pose_x, pose_y, 11, 12, 'b')
-    line_between(pose_x, pose_y, 12, 6, 'b')
-    # arms
-    line_between(pose_x, pose_y, 7, 9, 'b')
-    line_between(pose_x, pose_y, 7, 5, 'b')
-    line_between(pose_x, pose_y, 6, 8, 'b')
-    line_between(pose_x, pose_y, 8, 10, 'b')
-
-    # Scores
-    plt.draw()
-    plt.pause(0.001)
-
-
-def print_frame(f, bbox, h, w):
-    x1 = int(bbox[0] * w)
-    y1 = int(bbox[1] * h)
-    x2 = int(bbox[2] * w)
-    y2 = int(bbox[3] * h)
-    # confidence = elem[4]
-    # class_id = elem[5]
-    f = cv2.rectangle(f, (x1, y1), (x2, y2), (255, 0, 0), 1)
-    return f

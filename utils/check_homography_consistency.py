@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from modules.hpe.metrabs_trt.utils.misc import homography, get_augmentations, image_transformation, ImageTransformer
+from modules.hpe.utils.misc import homography, get_augmentations, image_transformation, ImageTransformer
 from utils.params import RealSenseIntrinsics
 import torch
 
