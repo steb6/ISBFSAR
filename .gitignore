@@ -5,6 +5,7 @@ __pycache__
 nturgbd_metrabs_2
 *.mp4*
 wandb
+checkpoints
 
 # modules hpe
 modules/hpe/modules/engines/*
