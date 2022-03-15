@@ -28,12 +28,12 @@ if __name__ == "__main__":
         for pose in target_set[0].detach().cpu().numpy():
             vis.clear()
             vis.print_pose(pose, edges)
-            vis.sleep(0.1)
-        time.sleep(1)
+            vis.sleep(0.01)
+        # time.sleep(1)
         for i, pose in enumerate(support_set[0].detach().cpu().numpy()):
             vis.set_title("SUPPORT SET: {}".format(data.classes[support_labels[0, i].item()]))
             for action in pose:
                 vis.clear()
                 vis.print_pose(action, edges)
-                vis.sleep(0.1)
-            vis.sleep(1)
+                vis.sleep(0.01)
+            # vis.sleep(1)

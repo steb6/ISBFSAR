@@ -41,7 +41,7 @@ class RealSenseIntrinsics(object):
 class TRXConfig(object):
     def __init__(self):
         self.model_path = 'modules/ar/trx/modules/raws/671.pth'
-        self.trt_path = 'modules/ar/trx/modules/engines/trx.engine'
+        self.trt_path = 'modules/ar/trx/modules/engines/fix_trx.engine'
         self.trans_linear_in_dim = 256
         self.trans_linear_out_dim = 128
         self.way = 5

@@ -30,7 +30,7 @@ if __name__ == "__main__":
     model = CNN_TRX(args).to(device)
     model.train()
 
-    data_path = "D:\\nturgbd_metrabs" if 'Users' in os.getcwd() else "../nturgbd_metrabs"  # TODO ADJUST
+    data_path = "D:\\nturgbd_metrabs" if 'Users' in os.getcwd() else "nturgbd_metrabs_2"  # TODO ADJUST
     train_data = MetrabsData(data_path, k=5, mode='train', n_task=10000)
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=1, num_workers=12)
     valid_data = MetrabsData(data_path, k=5, mode='valid', n_task=1000)

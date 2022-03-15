@@ -35,6 +35,7 @@ class MetrabsData(data.Dataset):
         path = random.sample(sequences, 1)[0]
         # path = sequences[0]  # TODO REMOVE DEBUG
         path = os.path.join(self.path, self.classes[id], path)
+        print(path)
         with open(path, 'rb') as file:
             elem = pickle.load(file)
         # elem = elem[:, self.skeleton_types[self.skeleton]['indices'], :]

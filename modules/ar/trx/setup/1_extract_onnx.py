@@ -7,7 +7,7 @@ import numpy as np
 if __name__ == "__main__":
     args = TRXConfig()
     model = CNN_TRX(args).to(args.device)  # declare necessary machine learning things
-    model_data = torch.load('modules/ar/trx/modules/raws/671.pth')
+    model_data = torch.load('modules/ar/trx/modules/raws/fix_223.pth')
     model.load_state_dict(model_data['model_state_dict'])
     model.eval()
 
@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
     res = model(support, labels, query)  # Check that arguments are good
 
-    onnx_file_name = "modules/ar/trx/modules/onnxs/trx.onnx"
+    onnx_file_name = "modules/ar/trx/modules/onnxs/fix_trx.onnx"
     # Export the model
     print('Export the onnx model static ...')
     torch.onnx.export(model,
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     # Check consistency
     res_pytorch = model(support, labels, query)
 
-    sess = ort.InferenceSession('modules/ar/trx/modules/onnxs/trx.onnx')
+    sess = ort.InferenceSession('modules/ar/trx/modules/onnxs/fix_trx.onnx')
     res_onnx = sess.run(None, {'support': support.cpu().detach().numpy(),
                                "labels": labels.cpu().detach().numpy(),
                                "query": query.cpu().detach().numpy()})
