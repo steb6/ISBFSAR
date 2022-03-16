@@ -30,7 +30,7 @@ if __name__ == "__main__":
         vis = MPLPosePrinter()  # TODO VIS DEBUG
 
     # Count total number of files (we remove 10 classes over 60 because those involves two person)
-    total = int(sum([len(files) for r, d, files in os.walk(in_dataset_path)]) * (1 - 1/6))
+    total = int(sum([len(files) if 's' in r else 0 for r, d, files in os.walk(in_dataset_path)]) * (1 - 1/6))
 
     # Get conversion class id -> class label
     with open(classes_path, "r", encoding='utf-8') as f:
@@ -41,22 +41,17 @@ if __name__ == "__main__":
         name = name.strip().replace(" ", "_").replace("/", "-").replace("’", "")
         class_dict[index] = name
 
-    # Create output directories
-    if os.path.exists(out_dataset_path):
-        shutil.rmtree(out_dataset_path)
-    os.mkdir(out_dataset_path)
-    for value in class_dict.values():
-        os.mkdir(os.path.join(out_dataset_path, value))
-
-    # Erase classes over 50 BECAUSE FROM 50 TO 60 INCLUDED ARE TWO PERSON ACTION
-    for i, value in enumerate(class_dict.values()):
-        if i >= 50:
-            to_erase = os.path.join(out_dataset_path, value)
-            shutil.rmtree(to_erase)
+    # Create output directories (ONLY THE MISSING ONES)
+    # for value in list(class_dict.values())[60:]:
+    #     os.mkdir(os.path.join(out_dataset_path, value))
 
     # Iterate all videos
     with tqdm(total=total) as progress_bar:
         for root, dirs, files in os.walk(in_dataset_path):
+
+            if 's' not in root:
+                continue
+
             for file in files:
 
                 # Retrieve class name (between A and _ es 'S001C001P001R001A001_rgb.avi'
@@ -65,7 +60,7 @@ if __name__ == "__main__":
                 class_name = class_dict[class_id]
 
                 # Skip if two person are involved
-                if list(class_dict.keys()).index(class_id) >= 50:
+                if list(class_dict.keys()).index(class_id) >= 106:
                     continue
 
                 # Read video

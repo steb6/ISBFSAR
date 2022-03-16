@@ -20,3 +20,6 @@ modules/ar/data/*
 modules/ar/modules/engines/*
 modules/ar/modules/onnxs/*
 modules/ar/modules/raws/*
+
+# focus
+modules/focus/modules
