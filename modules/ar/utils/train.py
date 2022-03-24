@@ -8,12 +8,12 @@ from modules.ar.utils.dataloader import MetrabsData
 from modules.ar.utils.misc import aggregate_accuracy, loss_fn
 from modules.ar.utils.model import CNN_TRX
 from utils.params import TRXConfig
+import random
 
 
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
 
 
-log_every = 1000
 optimize_every = 16
 
 if __name__ == "__main__":
@@ -30,20 +30,36 @@ if __name__ == "__main__":
     model = CNN_TRX(args).to(device)
     model.train()
 
-    data_path = "D:\\nturgbd_metrabs" if 'Users' in os.getcwd() else "nturgbd_metrabs_2"  # TODO ADJUST
-    train_data = MetrabsData(data_path, k=5, mode='train', n_task=10000)
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=1, num_workers=12)
-    valid_data = MetrabsData(data_path, k=5, mode='valid', n_task=1000)
-    valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=1, num_workers=12)
+    # Create dataset iterator
+    train_data = MetrabsData(args.data_path, k=5, n_task=10000)
+    valid_data = MetrabsData(args.data_path, k=5, n_task=1000)
 
+    # Divide dataset into train and validation
+    classes = train_data.classes
+    random.shuffle(classes)
+    n_train = int(len(classes) * 0.8)
+    train_data.classes = classes[:n_train]
+    valid_data.classes = classes[n_train:]
+
+    # Create loaders
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=1, num_workers=args.n_workers)
+    valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=1, num_workers=args.n_workers)
+
+    # Create optimizer and scheduler
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-2)
     optimizer.zero_grad()
     scheduler = MultiStepLR(optimizer, milestones=[10000, 100000], gamma=0.1)
 
+    # Start WANDB
     run = wandb.init(project="trx")
-    wandb.watch(model, log='all', log_freq=log_every)
+    wandb.watch(model, log='all', log_freq=args.log_every)
 
-    for epoch in range(10000):
+    # Log
+    print("Train samples: {}, valid samples: {}".format(len(train_loader), len(valid_loader)))
+    print("Training for {} epochs".format(args.n_epochs))
+    print("Logging every {} step".format(args.log_every))
+
+    for epoch in range(args.n_epochs):
 
         # TRAIN
         model.train()
@@ -78,7 +94,7 @@ if __name__ == "__main__":
                 optimizer.zero_grad()
                 scheduler.step()
 
-            if i % log_every == 0:
+            if i % args.log_every == 0:
                 wandb.log({"train/loss": sum(train_losses) / len(train_losses),
                            "train/accuracy": sum(train_accuracies) / len(train_accuracies),
                            "lr": optimizer.param_groups[0]['lr']})

@@ -9,8 +9,8 @@ from utils.matplotlib_visualizer import MPLPosePrinter
 
 from utils.params import MetrabsTRTConfig, RealSenseIntrinsics
 
-in_dataset_path = "D:\\nturgbd"
-out_dataset_path = "D:\\nturgbd_metrabs_2"
+in_dataset_path = "D:\\datasets\\nturgbd"
+out_dataset_path = "D:\\datasets\\nturgbd_metrabs_2"
 classes_path = "assets/nturgbd_classes.txt"
 n = 16
 
@@ -30,7 +30,7 @@ if __name__ == "__main__":
         vis = MPLPosePrinter()  # TODO VIS DEBUG
 
     # Count total number of files (we remove 10 classes over 60 because those involves two person)
-    total = int(sum([len(files) if 's' in r else 0 for r, d, files in os.walk(in_dataset_path)]) * (1 - 1/6))
+    total = int(sum([len(files) if '_s' in r else 0 for r, d, files in os.walk(in_dataset_path)]) * (1 - 16/60))
 
     # Get conversion class id -> class label
     with open(classes_path, "r", encoding='utf-8') as f:
@@ -41,19 +41,19 @@ if __name__ == "__main__":
         name = name.strip().replace(" ", "_").replace("/", "-").replace("’", "")
         class_dict[index] = name
 
-    # Create output directories (ONLY THE MISSING ONES)
-    # for value in list(class_dict.values())[60:]:
-    #     os.mkdir(os.path.join(out_dataset_path, value))
+    # Create output directories (ONLY THE MISSING ONES)  # TODO CAREFUL, ERASE WHAT DONE BEFORE
+    for value in list(class_dict.values())[60:]:
+        shutil.rmtree(os.path.join(out_dataset_path, value))
+        os.mkdir(os.path.join(out_dataset_path, value))
 
     # Iterate all videos
     with tqdm(total=total) as progress_bar:
         for root, dirs, files in os.walk(in_dataset_path):
 
-            if 's' not in root:
+            if '_s' not in root:
                 continue
 
             for file in files:
-
                 # Retrieve class name (between A and _ es 'S001C001P001R001A001_rgb.avi'
                 class_id = int(file.split("A")[1].split("_")[0])  # take the integer of the class
                 class_id = "A" + str(class_id)
@@ -63,6 +63,11 @@ if __name__ == "__main__":
                 if list(class_dict.keys()).index(class_id) >= 106:
                     continue
 
+                # Check if output path already exists
+                output_path = os.path.join(out_dataset_path, class_name)
+                offset = sum([len(files) for r, d, files in os.walk(output_path)])
+                output_path = os.path.join(output_path, str(offset) + '.pkl')
+
                 # Read video
                 full = os.path.join(root, file)
                 video = cv2.VideoCapture(full)
@@ -71,16 +76,15 @@ if __name__ == "__main__":
                 while ret:
                     frames.append(frame)
                     ret, frame = video.read()
+                if len(frames) < n:
+                    continue
 
                 # Select just n frames
                 n_frames = len(frames) - (len(frames) % n)
+                if n_frames == 0:
+                    continue
                 indices = list(range(0, n_frames, int(n_frames / n)))
                 frames = [frames[i] for i in indices]
-
-                # Create output path
-                output_path = os.path.join(out_dataset_path, class_name)
-                offset = sum([len(files) for r, d, files in os.walk(output_path)])
-                output_path = os.path.join(output_path, str(offset) + '.pkl')
 
                 # Iterate over all frames
                 poses = []

@@ -207,6 +207,7 @@ if __name__ == "__main__":
     from tqdm import tqdm
     from utils.matplotlib_visualizer import MPLPosePrinter
     import matplotlib.pyplot as plt
+    import cv2
 
     args = MainConfig()
 
@@ -214,10 +215,11 @@ if __name__ == "__main__":
     pose_visualizer = MPLPosePrinter()
 
     cap = RealSense(width=args.cam_width, height=args.cam_height)
+    # cap = cv2.VideoCapture('video.mp4')
 
     for _ in tqdm(range(10000)):
         ret, img = cap.read()
-        pose3d, ed, bbone_input, pose2d, _, _, _, _ = h.estimate(img, just_root=True)
+        pose3d, ed, bbone_input, pose2d, _, _, _, _ = h.estimate(img)
         if pose3d is not None:
             pose3d -= pose3d[0]  # Center
 
@@ -225,3 +227,32 @@ if __name__ == "__main__":
             pose_visualizer.print_pose(pose3d, ed)
             cv2.imshow("rgb", img)
             plt.pause(0.001)
+
+# # TODO REMOVE DEBUG
+#     import time
+#     video = cv2.VideoCapture('video.mp4')
+#     poses = []
+#     fps = video.get(cv2.CAP_PROP_FPS)
+#     ret, img = video.read()
+#     pause = True
+#     while ret:
+#         start = time.time()
+#
+#         pose3d, ed, bbone_input, pose2d, _, _, _, _ = h.estimate(img)
+#
+#         if pose3d is not None:
+#             pose3d -= pose3d[0]  # Center
+#
+#             pose_visualizer.clear()
+#             pose_visualizer.print_pose(pose3d, ed)
+#             cv2.imshow("rgb", img)
+#             plt.pause(0.001)
+#             plt.pause(0.2)
+#
+#         n_skip = int((time.time() - start) * fps)
+#         for _ in range(n_skip):
+#             _, _ = video.read()
+#
+#         ret, img = video.read()
+#
+#     video.release()

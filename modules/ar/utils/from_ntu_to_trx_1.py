@@ -18,7 +18,7 @@ VIS_DEBUG = False
 
 if __name__ == "__main__":
 
-    # raise Exception("REMOVE THIS LINE TO ERASE CURRENT DATASET")  # TODO ADD
+    raise Exception("REMOVE THIS LINE TO ERASE CURRENT DATASET")  # TODO ADD
 
     skeleton = 'smpl+head_30'
     with open('assets/skeleton_types.pkl', "rb") as input_file:

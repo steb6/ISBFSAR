@@ -4,7 +4,7 @@ from contextlib import redirect_stdout
 import numpy as np
 import pycocotools.mask as mask_util
 import torch
-import modules.focus.utils.utils as utils
+import modules.focus.head_detection.utils as utils
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 

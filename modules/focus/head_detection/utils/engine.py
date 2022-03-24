@@ -3,9 +3,9 @@ import sys
 import time
 import torch
 import torchvision.models.detection.mask_rcnn
-import modules.focus.utils.utils as utils
-from modules.focus.utils.coco_eval import CocoEvaluator
-from modules.focus.utils.coco_utils import get_coco_api_from_dataset
+import modules.focus.head_detection.utils.utils as utils
+from modules.focus.head_detection.utils.coco_eval import CocoEvaluator
+from modules.focus.head_detection.utils.coco_utils import get_coco_api_from_dataset
 
 
 def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq, scaler=None):

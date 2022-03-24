@@ -42,8 +42,11 @@ class RealSenseIntrinsics(object):
 
 class TRXConfig(object):
     def __init__(self):
-        self.data_path = "D:\\nturgbd_metrabs_2/" if 'Users' in os.getcwd() else "nturgbd_metrabs/"
-        self.trt_path = 'modules/ar/modules/engines/fix_trx.engine'
+        self.data_path = "D:/datasets/nturgbd_metrabs_2/" if 'Users' in os.getcwd() else "../nturgbd_metrabs_2/"
+        self.n_workers = 2 if 'Users' in os.getcwd() else 12
+        self.n_epochs = 10000
+        self.log_every = 10 if 'Users' in os.getcwd() else 1000
+        self.trt_path = 'modules/ar/modules/engines/FULL.engine'
         self.trans_linear_in_dim = 256
         self.trans_linear_out_dim = 128
         self.way = 5

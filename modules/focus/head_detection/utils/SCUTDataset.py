@@ -10,7 +10,7 @@ import torch
 from PIL import Image
 import xml.etree.ElementTree as ET
 import random
-from modules.focus.utils.misc import get_transform
+from modules.focus.head_detection.utils.misc import get_transform
 
 
 class SCUTDataset(torch.utils.data.Dataset):

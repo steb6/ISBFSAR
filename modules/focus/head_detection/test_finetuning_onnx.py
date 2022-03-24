@@ -1,24 +1,21 @@
 import cv2
 import torch
-from modules.focus.utils.misc import get_model
 from modules.hpe.utils.misc import nms_cpu
-
+from onnxruntime import InferenceSession
+from tqdm import tqdm
+import numpy as np
 
 if __name__ == "__main__":
-    model = get_model()
-    model.load_state_dict(torch.load('modules/focus/modules/raw/second.pth'))
-    model.cuda()
-    model.eval()
+    model = InferenceSession('modules/focus/head_detection/modules/onnx/longest.onnx')
     cam = cv2.VideoCapture(0)
 
-    while True:
+    for _ in tqdm(range(10000)):
         ret, img = cam.read()
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        inp = torch.FloatTensor(img).cuda() / 255.
-        inp = inp.permute(2, 0, 1)
-        res = model([inp])
-        boxes = res[0]['boxes'].detach().int().cpu().numpy()
-        scores = res[0]['scores'].detach().cpu().numpy()
+        inp = np.transpose(img, (2, 0, 1)).astype(np.float32) / 255.
+        res = model.run(None, {'img': inp[None, ...]})
+        boxes = res[0].astype(int)
+        scores = res[2]
         good = nms_cpu(boxes, scores, nms_thresh=0.01)
 
         if len(good) > 0:

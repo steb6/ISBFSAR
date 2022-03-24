@@ -12,11 +12,6 @@ from utils.matplotlib_visualizer import MPLPosePrinter as PosePrinter
 from modules.hpe.hpe import HumanPoseEstimator
 from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig
 from utils.params import TRXConfig
-# from utils.params import TRXConfig, LSTMTrainConfig  # TODO MODIFY
-# if MainConfig().ar == "lstm":
-#     from modules.ar.lstm.lstm import ActionRecognizer
-# elif MainConfig().ar == "trx":
-#     from modules.ar.trx.trx import ActionRecognizer
 
 
 class ISBFSAR:

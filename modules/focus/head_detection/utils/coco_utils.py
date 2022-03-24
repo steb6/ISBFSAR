@@ -3,7 +3,7 @@ import os
 import torch
 import torch.utils.data
 import torchvision
-import modules.focus.utils.transforms as T
+import modules.focus.head_detection.utils.transforms as T
 from pycocotools import mask as coco_mask
 from pycocotools.coco import COCO
 

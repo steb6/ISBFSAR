@@ -6,7 +6,7 @@ class MPLPosePrinter:
         plt.ion()
         fig = plt.figure()
         self.ax = fig.add_subplot(111, projection='3d')
-
+        self.ax.view_init(90, 90)
         # Setting the axes properties
         self.ax.set_xlim3d([-1.0, 1.0])
         self.ax.set_xlabel('X')

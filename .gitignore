@@ -22,4 +22,5 @@ modules/ar/modules/onnxs/*
 modules/ar/modules/raws/*
 
 # focus
-modules/focus/modules
+modules/focus/focus_detection/modules
+modules/focus/head_detection/modules

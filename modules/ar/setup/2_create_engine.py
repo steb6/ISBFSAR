@@ -21,6 +21,6 @@ if __name__ == "__main__":
     i = {"support": np.ones(shape=(80, 90), dtype=np.float32),
          "query": np.ones(shape=(16, 90), dtype=np.float32),
          "labels": np.ones(shape=(5), dtype=int)}
-    create_engine('modules/ar/trx/modules/onnxs/fix_trx.onnx',
-                  'modules/ar/trx/modules/engines/fix_trx.engine',
+    create_engine('modules/ar/modules/onnxs/FULL.onnx',
+                  'modules/ar/modules/engines/FULL.engine',
                   i)
