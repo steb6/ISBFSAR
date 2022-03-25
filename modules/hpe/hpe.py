@@ -1,11 +1,11 @@
 import copy
 import cv2
 import pickle
-from polygraphy.backend.trt import EngineFromBytes, TrtRunner
 from modules.hpe.utils.misc import postprocess_yolo_output, homography, get_augmentations, is_within_fov, reconstruct_absolute
 import einops
 import numpy as np
 from utils.input import RealSense
+from utils.tensorrt_runner import Runner
 
 
 class HumanPoseEstimator:
@@ -43,20 +43,23 @@ class HumanPoseEstimator:
             self.skeleton_types = pickle.load(input_file)
 
         # Load modules
-        with open(model_config.yolo_engine_path, 'rb') as file:
-            self.yolo_engine = EngineFromBytes(file.read())
-        self.yolo = TrtRunner(self.yolo_engine)
-        self.yolo.activate()
+        self.yolo = Runner(model_config.yolo_engine_path)
+        # with open(model_config.yolo_engine_path, 'rb') as file:
+        #     self.yolo_engine = EngineFromBytes(file.read())
+        # self.yolo = TrtRunner(self.yolo_engine)
+        # self.yolo.activate()
 
-        with open(model_config.image_transformation_path, 'rb') as file:
-            self.image_transformation_engine = EngineFromBytes(file.read())
-        self.image_transformation = TrtRunner(self.image_transformation_engine)
-        self.image_transformation.activate()
+        self.image_transformation = Runner(model_config.image_transformation_path)
+        # with open(model_config.image_transformation_path, 'rb') as file:
+        #     self.image_transformation_engine = EngineFromBytes(file.read())
+        # self.image_transformation = TrtRunner(self.image_transformation_engine)
+        # self.image_transformation.activate()
 
-        with open(model_config.bbone_engine_path, 'rb') as file:
-            self.bbone_engine = EngineFromBytes(file.read())
-        self.bbone = TrtRunner(self.bbone_engine)
-        self.bbone.activate()
+        self.bbone = Runner(model_config.bbone_engine_path)
+        # with open(model_config.bbone_engine_path, 'rb') as file:
+        #     self.bbone_engine = EngineFromBytes(file.read())
+        # self.bbone = TrtRunner(self.bbone_engine)
+        # self.bbone.activate()
 
         self.head_weights = np.load(model_config.head_weight_path)
         self.heads_bias = np.load(model_config.head_bias_path)
@@ -71,8 +74,10 @@ class HumanPoseEstimator:
         yolo_in = yolo_in / 255.0
 
         # Yolo
-        outputs = self.yolo.infer(feed_dict={"input": yolo_in})
-        boxes, confidences = outputs['boxes'], outputs['confs']
+        # outputs = self.yolo.infer(feed_dict={"input": yolo_in})
+        # boxes, confidences = outputs['boxes'], outputs['confs']
+        outputs = self.yolo(yolo_in)
+        boxes, confidences = outputs[0].reshape(1, 4032, 1, 4), outputs[1].reshape(1, 4032, 80)
         bboxes_batch = postprocess_yolo_output(boxes, confidences, self.yolo_thresh, self.nms_thresh)
 
         # Get only the bounding box with the human with highest probability
@@ -103,14 +108,18 @@ class HumanPoseEstimator:
 
         # Apply homography
         H = self.K @ np.linalg.inv(new_K @ homo_inv)
-        bbone_in = self.image_transformation.infer(feed_dict={"frame": frame.astype(int),
-                                                              "H": H.astype(np.float32)})
-        bbone_in = bbone_in['images']
+        # bbone_in = self.image_transformation.infer(feed_dict={"frame": frame.astype(int),
+        #                                                       "H": H.astype(np.float32)})
+        # bbone_in = bbone_in['images']
+        bbone_in = self.image_transformation([frame.astype(int), H.astype(np.float32)])
+        bbone_in = bbone_in[0].reshape(5, 256, 256, 3)
         bbone_in_ = (bbone_in / 255.0).astype(np.float32)
 
         # BackBone
-        outputs = self.bbone.infer(feed_dict={"images": bbone_in_})
-        features = outputs['prediction']
+        # outputs = self.bbone.infer(feed_dict={"images": bbone_in_})
+        # features = outputs['prediction']
+        outputs = self.bbone(bbone_in_)
+        features = outputs[0].reshape(5, 8, 8, 1280)
 
         # Heads
         logits = (features @ self.head_weights[0][0]) + self.heads_bias  # 5, 8, 8, 288

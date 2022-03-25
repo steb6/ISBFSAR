@@ -1,61 +1,15 @@
-import cv2
-from ptgaze.gaze_estimator import GazeEstimator
-from tqdm import tqdm
-from scipy.spatial.transform import Rotation
+import os
 import numpy as np
-
-
-class FocusDetector:
-    def __init__(self):
-
-        class ModelConfig:
-            def __init__(self):
-                self.name = 'resnet18'
-
-        class FaceDetectorConfig:
-            def __init__(self):
-                self.mode = 'mediapipe'
-                self.mediapipe_max_num_faces = 1
-
-        class GazeEstimatorConfig:
-            def __init__(self):
-                self.camera_params = 'assets/camera_params.yaml'
-                self.normalized_camera_params = 'assets/eth-xgaze.yaml'
-                self.normalized_camera_distance = 0.6
-                self.checkpoint = 'modules/focus/modules/raw/eth-xgaze_resnet18.pth'
-                self.image_size = [224, 224]
-
-        class Config:
-            def __init__(self):
-                self.face_detector = FaceDetectorConfig()
-                self.gaze_estimator = GazeEstimatorConfig()
-                self.model = ModelConfig()
-                self.mode = 'ETH-XGaze'
-                self.device = 'cuda'
-
-        config = Config()
-        self.gaze_estimator = GazeEstimator(config)
-
-    def estimate(self, img):
-
-        faces = self.gaze_estimator.detect_faces(img)
-
-        if len(faces) == 0:
-            return None
-
-        fc = faces[0]  # We can only have one face
-        self.gaze_estimator.estimate_gaze(img, fc)
-        return fc
-
-
-def convert_pt(point):
-    return tuple(np.round(point).astype(int).tolist())
+import cv2
+from scipy.spatial.transform import Rotation
+from tqdm import tqdm
+from modules.focus.focus import FocusDetector, convert_pt
 
 
 if __name__ == "__main__":
     import numpy as np
     import yaml
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture('video.mp4')
     det = FocusDetector()
 
     area_thr = 0.03  # head bounding box must be over this value to be close
@@ -68,10 +22,13 @@ if __name__ == "__main__":
               'site-packages/ptgaze/data/calib/sample_params.yaml') as f:
         data = yaml.safe_load(f)
     camera_matrix = np.array(data['camera_matrix']['data']).reshape(3, 3)
-    focuses = []
-    for _ in tqdm(range(100000)):
 
-        ok, frame = cap.read()
+    with open('D:/datasets/mutualGaze_dataset/realsense/eyecontact_annotations_all.txt', "r") as infile:
+        files = infile.readlines()
+    for file in files:
+        file, label = file.split(' ')
+        file = 'D:/datasets/mutualGaze_dataset/realsense' + file[1:]
+        frame = cv2.imread(file)
         face = det.estimate(frame)
         if face is not None:
 
@@ -133,21 +90,22 @@ if __name__ == "__main__":
                     cv2.line(frame, center, pt, color, 2, cv2.LINE_AA)  # lw
 
                 # Print focus
-                score = abs(head_pose[1])
-                cv2.putText(frame, "{:.2f} < {:.2f}".format(score, dist_thr), (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                score1 = abs(head_pose[1])  # on axis x
+                score2 = abs(head_pose[0])  # on axis y
+                cv2.putText(frame, "{:.2f} < {:.2f}, {:.2f} < {:.2f}".format(score1, dist_thr, score2, dist_thr), (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 1,
                             (0, 0, 0), 2, cv2.LINE_AA)
-                focus = score < dist_thr
+                focus = score1 < dist_thr and score2 < dist_thr
 
             # Print focus
-            focuses.append(focus)
-            focuses = focuses[-16:]
-
-            focus = focuses.count(True) > len(focuses) / 2
-
             if focus:
                 cv2.putText(frame, "FOCUS", (10, 160), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
             else:
                 cv2.putText(frame, "NOT FOCUS", (10, 160), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+
+            if bool(int(label[0])):
+                cv2.putText(frame, "REAL: FOCUS", (10, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+            else:
+                cv2.putText(frame, "REAL: NOT FOCUS", (10, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
 
             # # Print gaze vector
             # point0 = face.center
@@ -162,6 +120,6 @@ if __name__ == "__main__":
             # frame = cv2.line(frame, pt0, pt1, (255, 0, 0), 1, cv2.LINE_AA)
 
         cv2.imshow('frame', frame)
-        cv2.waitKey(100)
+        cv2.waitKey(0)
 
     cap.release()
