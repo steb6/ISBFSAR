@@ -24,3 +24,5 @@ modules/ar/modules/raws/*
 # focus
 modules/focus/focus_detection/modules
 modules/focus/head_detection/modules
+modules/focus/deepheadpose
+modules/focus/modules
