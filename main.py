@@ -4,6 +4,7 @@ import numpy as np
 from tqdm import tqdm
 import time
 from modules.ar.trx import ActionRecognizer
+from modules.focus.focus import FocusDetector
 from utils.input import JustText
 import cv2
 from playsound import playsound
@@ -15,9 +16,10 @@ from utils.params import TRXConfig
 
 
 class ISBFSAR:
-    def __init__(self, hpe, ar, text, args, debug=True):
+    def __init__(self, hpe, ar, text, focus, args, debug=True):
         self.hpe = hpe
         self.ar = ar
+        self.focus = focus
 
         # Connect to spt
         text.start()  # start Client
@@ -297,10 +299,11 @@ class ISBFSAR:
 
 if __name__ == "__main__":
 
+    f = FocusDetector()
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
     n = ActionRecognizer(TRXConfig())
     t = JustText(MainConfig().just_text_port)
 
-    master = ISBFSAR(h, n, t, MainConfig(), debug=True)
+    master = ISBFSAR(h, n, t, f, MainConfig(), debug=True)
 
     master.run()

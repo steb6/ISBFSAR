@@ -1,16 +1,19 @@
 import pickle
 import numpy as np
-from polygraphy.backend.trt import EngineFromBytes, TrtRunner
+# from polygraphy.backend.trt import EngineFromBytes, TrtRunner
+from utils.params import TRXConfig
+from utils.tensorrt_runner import Runner
 
 
 class ActionRecognizer:
     def __init__(self, args):
         self.device = args.device
 
-        with open(args.trt_path, 'rb') as file:
-            ar_engine = EngineFromBytes(file.read())
-        self.ar = TrtRunner(ar_engine)
-        self.ar.activate()
+        self.ar = Runner(args.trt_path)
+        # with open(args.trt_path, 'rb') as file:
+        #     ar_engine = EngineFromBytes(file.read())
+        # self.ar = TrtRunner(ar_engine)
+        # self.ar.activate()
 
         self.support_set = np.zeros((args.way, args.seq_len, args.n_joints * 3), dtype=float)
         self.previous_frames = []
@@ -41,10 +44,13 @@ class ActionRecognizer:
         poses = np.stack(self.previous_frames).reshape(self.seq_len, -1).astype(np.float32)
         labels = np.array(list(range(self.way)))
         ss = self.support_set.reshape(-1, 90).astype(np.float32)
-        outputs = self.ar.infer(feed_dict={"support": ss,
-                                           "labels": labels,
-                                           "query": poses})
-        outputs = outputs['pred']
+        # outputs = self.ar.infer(feed_dict={"support": ss,
+        #                                    "labels": labels,
+        #                                    "query": poses})
+        # outputs = outputs['pred']
+        outputs = self.ar([ss, labels, poses])
+        outputs = outputs[0].reshape(1, 5)
+
         # Softmax
         max_along_axis = outputs.max(axis=1, keepdims=True)
         exponential = np.exp(outputs - max_along_axis)
@@ -87,3 +93,11 @@ class ActionRecognizer:
                 self.support_labels.append(raw[1])
             y = np.array([int(self.support_labels.index(raw[1]))])
             self.support_set[y.item()] = x
+
+
+if __name__ == "__main__":
+    ar = ActionRecognizer(TRXConfig())
+    for _ in range(5):
+        ar.train((np.random.random((16, 30, 3)), "test"))
+    for _ in range(1000):
+        ar.inference(np.random.random((30, 3)))
