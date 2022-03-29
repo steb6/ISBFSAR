@@ -6,6 +6,7 @@ nturgbd_metrabs_2
 *.mp4*
 wandb
 checkpoints
+*.pth
 
 # modules hpe
 modules/hpe/modules/engines/*
@@ -26,3 +27,7 @@ modules/focus/focus_detection/modules
 modules/focus/head_detection/modules
 modules/focus/deepheadpose
 modules/focus/modules
+modules/focus/gaze_estimation/deepheadpose
+modules/focus/gaze_estimation/modules
+modules/focus/mutual_gaze/focus_detection/0.98.pth
+modules/focus/mutual_gaze/head_detection/epoch_0.pth

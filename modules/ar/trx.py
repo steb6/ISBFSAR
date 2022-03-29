@@ -1,6 +1,5 @@
 import pickle
 import numpy as np
-# from polygraphy.backend.trt import EngineFromBytes, TrtRunner
 from utils.params import TRXConfig
 from utils.tensorrt_runner import Runner
 
@@ -10,10 +9,6 @@ class ActionRecognizer:
         self.device = args.device
 
         self.ar = Runner(args.trt_path)
-        # with open(args.trt_path, 'rb') as file:
-        #     ar_engine = EngineFromBytes(file.read())
-        # self.ar = TrtRunner(ar_engine)
-        # self.ar.activate()
 
         self.support_set = np.zeros((args.way, args.seq_len, args.n_joints * 3), dtype=float)
         self.previous_frames = []
@@ -23,9 +18,6 @@ class ActionRecognizer:
         self.n_joints = args.n_joints
 
     def inference(self, pose):
-        """
-        pose: FloatTensor 30x3 already normalized
-        """
         if pose is None:
             return None
 
@@ -44,10 +36,6 @@ class ActionRecognizer:
         poses = np.stack(self.previous_frames).reshape(self.seq_len, -1).astype(np.float32)
         labels = np.array(list(range(self.way)))
         ss = self.support_set.reshape(-1, 90).astype(np.float32)
-        # outputs = self.ar.infer(feed_dict={"support": ss,
-        #                                    "labels": labels,
-        #                                    "query": poses})
-        # outputs = outputs['pred']
         outputs = self.ar([ss, labels, poses])
         outputs = outputs[0].reshape(1, 5)
 
@@ -66,7 +54,7 @@ class ActionRecognizer:
                 results['Action_{}'.format(k)] = predicted[k]
         return results
 
-    def remove(self, flag):  # TODO fix this
+    def remove(self, flag):
         """
         flag: Str
         """

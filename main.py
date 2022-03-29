@@ -1,10 +1,10 @@
+from modules.focus.focus import FocusDetector
 import os
 from multiprocessing.connection import Listener
 import numpy as np
 from tqdm import tqdm
 import time
 from modules.ar.trx import ActionRecognizer
-from modules.focus.focus import FocusDetector
 from utils.input import JustText
 import cv2
 from playsound import playsound
@@ -94,6 +94,14 @@ class ISBFSAR:
         #         m = m / (len(self.last_poses) - 1)
         # TODO END EXPERIMENT
 
+        # TODO START FOCUS
+        ret = self.focus.estimate(img)
+        if ret is not None:
+            focus, face = ret
+            img = self.focus.print_if_is_focus(img)
+            img = self.focus.print_bbox(img, face)
+        # TODO END FOCUS
+
         end = time.time()
 
         # Compute fps
@@ -137,12 +145,12 @@ class ISBFSAR:
                 #         c = (0, 255, 0) if is_f else (0, 0, 255)
                 #         img = cv2.circle(img, p, 5, c, 2)
 
-                # Print 2d results on bbone input
-                if is_fov is not None:
-                    for point, is_fov in zip(pose2d_bbone, is_fov):
-                        p = (int(point[0]), int(point[1]))
-                        c = (0, 255, 0) if is_fov else (0, 0, 255)
-                        bbone_in = cv2.circle(bbone_in, p, 5, c, 2)
+                # # Print 2d results on bbone input
+                # if is_fov is not None:
+                #     for point, is_fov in zip(pose2d_bbone, is_fov):
+                #         p = (int(point[0]), int(point[1]))
+                #         c = (0, 255, 0) if is_fov else (0, 0, 255)
+                #         bbone_in = cv2.circle(bbone_in, p, 5, c, 2)
 
                 # Print action
                 i = 0
@@ -159,7 +167,7 @@ class ISBFSAR:
                                     cv2.LINE_AA)
                         i += 1
 
-                cv2.imshow("2D predictions", bbone_in.astype(np.uint8))
+                # cv2.imshow("2D predictions", bbone_in.astype(np.uint8))
 
             cv2.imshow("Cam", img)
             cv2.waitKey(1)

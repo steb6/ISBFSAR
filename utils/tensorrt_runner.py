@@ -55,7 +55,7 @@ class Runner:
         if not isinstance(pc, list):
             pc = [pc]
         for elem, inp in zip(pc, self.inputs):
-            # elem = elem.astype(trt.nptype(trt.float32)).ravel()
+
             elem = elem.ravel()
             np.copyto(inp.host, elem)
 
