@@ -4,10 +4,11 @@ import torch.optim
 import copy
 from torchvision import transforms
 from modules.focus.mutual_gaze.focus_detection.model import MutualGazeDetector
-from tqdm import tqdm
 import cv2
 import numpy as np
+from tqdm import tqdm
 
+WINDOW_SIZE = 1
 
 if __name__ == "__main__":
     head_model = get_model()
@@ -16,17 +17,18 @@ if __name__ == "__main__":
     head_model.eval()
 
     focus_model = MutualGazeDetector()
-    focus_model.load_state_dict(torch.load('modules/focus/mutual_gaze/focus_detection/0.98.pth'))
+    focus_model.load_state_dict(torch.load('modules/focus/mutual_gaze/focus_detection/balanced.pth'))
     focus_model.cuda()
     focus_model.eval()
 
-    cam = cv2.VideoCapture(2)
+    cam = cv2.VideoCapture('video.mp4')
 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
-    # for _ in tqdm(range(10000)):
-    while True:
+    for _ in tqdm(range(10000)):
+    # while True:
+        focuses = []
         ret, img = cam.read()
 
         inp = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -46,7 +48,7 @@ if __name__ == "__main__":
 
         if len(boxes) > 0:
             box = boxes[0]
-            x = img[box[0]:box[2], box[1]:box[3]]
+            x = img[box[1]:box[3], box[0]:box[2]]
 
             # TODO PAD
             if x.shape[0] < x.shape[1]:
@@ -58,6 +60,7 @@ if __name__ == "__main__":
             x = cv2.resize(x, (256, 256))
             # TODO END PAD
 
+            normalized_image = copy.deepcopy(x)
             x = torch.FloatTensor(x)
             x = x.unsqueeze(0)
             x = x.permute(0, 3, 1, 2)
@@ -67,9 +70,17 @@ if __name__ == "__main__":
 
             out = focus_model(x)
 
-            img = cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
-            print("FOCUS" if out.item() > 0.5 else "NOT FOCUS")
-            cv2.putText(img, "{}".format(out.item()), (50, 50),
+            focuses.append(out.item() > 0.5)
+            if WINDOW_SIZE > 1:
+                if len(focuses) > WINDOW_SIZE:
+                    focuses = focuses[-WINDOW_SIZE:]
+                is_focus = sum(focuses) > (len(focuses) * 2)
+            else:
+                is_focus = out.item() > 0.5
+
+            color = (0, 0, 255) if out < 0.5 else (0, 255, 0)
+            img = cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), color, 2)
+            cv2.putText(img, "{:.2f}".format(out.item()), (box[0], box[1]),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0),
                         2,
                         cv2.LINE_AA)

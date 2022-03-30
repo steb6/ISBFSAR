@@ -27,7 +27,11 @@ if __name__ == "__main__":
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
-    for _ in range(100):
+    print("Train set length: {}, valid set length: {}".format(len(train_loader), len(valid_loader)))
+    print("Train set watching: {}, not watching: {}".format(train_data.n_watch, train_data.n_not_watch))
+    print("Valid set watching: {}, not watching: {}".format(valid_data.n_watch, valid_data.n_not_watch))
+
+    for _ in range(1000):
         # TRAIN
         losses = []
         accuracies = []
@@ -49,16 +53,13 @@ if __name__ == "__main__":
             accuracy = ((out.squeeze() > 0.5).int() == y.int()).sum().item() / torch.numel(out)
             accuracies.append(accuracy)
 
-            if i % LOG_EVERY == 0:
-                wandb.log({"train/loss": sum(losses) / len(losses),
-                           "train/accuracy": sum(accuracies) / len(accuracies),
-                           "lr": optimizer.param_groups[0]['lr']})
-                losses = []
-                accuracies = []
-
-        # EVAL
+        wandb.log({"train/loss": sum(losses) / len(losses),
+                   "train/accuracy": sum(accuracies) / len(accuracies),
+                   "lr": optimizer.param_groups[0]['lr']})
         losses = []
         accuracies = []
+
+        # EVAL
         model.eval()
         for x, y in tqdm(valid_loader):
 

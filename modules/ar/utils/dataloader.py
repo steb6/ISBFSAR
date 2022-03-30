@@ -4,6 +4,8 @@ import torch.utils.data as data
 import random
 import numpy as np
 
+# https://rose1.ntu.edu.sg/dataset/actionRecognition/
+
 
 class MetrabsData(data.Dataset):
     def __init__(self, path, k=5, n_task=10000, return_true_class_index=False):
