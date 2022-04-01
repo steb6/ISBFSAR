@@ -201,16 +201,23 @@ if __name__ == "__main__":
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
     pose_visualizer = MPLPosePrinter()
 
-    cap = RealSense(width=args.cam_width, height=args.cam_height)
-    # cap = cv2.VideoCapture('video.mp4')
+    # cap = RealSense(width=args.cam_width, height=args.cam_height)
+    cap = cv2.VideoCapture('Test.mp4')
 
     for _ in tqdm(range(10000)):
         ret, img = cap.read()
-        pose3d, ed, bbone_input, pose2d, _, _, _, _ = h.estimate(img)
+        img = img[:, 240:-240, :]
+        img = cv2.resize(img, (640, 480))
+        pose3d, ed, bbone_input, pose2d, is_fov, _, _, _ = h.estimate(img)
         if pose3d is not None:
             pose3d -= pose3d[0]  # Center
 
             pose_visualizer.clear()
             pose_visualizer.print_pose(pose3d, ed)
+
+            bbone_input = bbone_input.astype(np.uint8)
+            for elem, label in zip(pose2d, is_fov):
+                bbone_input = cv2.circle(bbone_input, (int(elem[0]), int(elem[1])), 2, (0, 255, 0) if label else (0, 0, 255), 2, cv2.LINE_AA)
+            cv2.imshow("BBONE", bbone_input)
             cv2.imshow("rgb", img)
             plt.pause(0.001)

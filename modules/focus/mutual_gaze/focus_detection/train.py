@@ -10,7 +10,7 @@ LOG_EVERY = 10
 
 if __name__ == "__main__":
     train_data = MARIAData("D:/datasets/focus_dataset", mode="train")
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=32, num_workers=2)
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=32, num_workers=2, shuffle=True)
     valid_data = MARIAData("D:/datasets/focus_dataset", mode="valid")
     valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=32, num_workers=2)
 
@@ -36,7 +36,7 @@ if __name__ == "__main__":
         losses = []
         accuracies = []
         model.train()
-        for i, (x, y) in enumerate(tqdm(train_loader)):
+        for i, (x, y) in enumerate(tqdm(train_loader, desc="Train epoch {}".format(_))):
 
             x = x.permute(0, 3, 1, 2)
             x = x / 255.
@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
         # EVAL
         model.eval()
-        for x, y in tqdm(valid_loader):
+        for x, y in tqdm(valid_loader, desc="Valid epoch {}".format(_)):
 
             x = x.permute(0, 3, 1, 2)
             x = x / 255.
@@ -80,4 +80,5 @@ if __name__ == "__main__":
                    "valid/accuracy": sum(accuracies) / len(accuracies),
                    "lr": optimizer.param_groups[0]['lr']})
 
-        torch.save(model.state_dict(), "{:.2f}.pth".format(sum(accuracies) / len(accuracies)))
+        torch.save(model.state_dict(), "acc_{:.2f}_loss_{:.2f}.pth".format(sum(accuracies) / len(accuracies),
+                                                                           sum(losses) / len(losses)))

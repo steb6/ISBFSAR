@@ -1,52 +1,60 @@
 import os
 import cv2
+import numpy as np
 import torch.utils.data as data
 import random
-
 from modules.focus.mutual_gaze.focus_detection.augmentations import horizontal_shift, vertical_shift, brightness, zoom, \
-    channel_shift, horizontal_flip, rotation
+    horizontal_flip, rotation
 
 
 class MARIAData(data.Dataset):
-    def __init__(self, path, mode="train", train_size=0.8):
-        self.path = path
-        sessions = os.listdir(path)
+    def __init__(self, path, mode="train", augmentation_size=0.2):
         self.mode = mode
         if mode == "train":
-            sessions = sessions[:int(len(sessions) * train_size)]
+            sessions = np.load('assets/setsFile_participants.npz')['pxx_train'][0]
         else:
-            sessions = sessions[int(len(sessions) * train_size):]
+            sessions = np.load('assets/setsFile_participants.npz')['pxx_test'][0]
         self.images = []
         self.labels = []
         for session in sessions:
+            session = str(session)
             watching = os.listdir(os.path.join(path, session, 'watching'))
-            for _ in range(2 if self.mode == "train" else 1):
-                self.images += [os.path.join(path, session, 'watching', w) for w in watching]
+            self.images += [os.path.join(path, session, 'watching', w) for w in watching]
             not_watching = os.listdir(os.path.join(path, session, 'not_watching'))
             self.images += [os.path.join(path, session, 'not_watching', n) for n in not_watching]
-            for _ in range(2 if self.mode == "train" else 1):
-                self.labels += [True for _ in range(len(os.listdir(os.path.join(path, session, 'watching'))))]
+            self.labels += [True for _ in range(len(os.listdir(os.path.join(path, session, 'watching'))))]
             self.labels += [False for _ in range(len(os.listdir(os.path.join(path, session, 'not_watching'))))]
         aux = list(zip(self.images, self.labels))
         random.shuffle(aux)
+        # Augmentation
+        if self.mode == "train":
+            self.augment = [False for _ in range(len(aux))]
+            aux = aux + aux[:int(len(aux) * augmentation_size)]
+            self.augment = self.augment + [True for _ in range(len(aux) - len(self.augment))]
+            self.aug_values = [[random.uniform(-0.2, 0.2),
+                                random.uniform(-0.2, 0.2),
+                                random.uniform(0.5, 2),
+                                random.uniform(0.9, 1),
+                                random.random() < 0.5,
+                                int(random.uniform(-30, 30))] for _ in range(len(self.augment))]
         self.images, self.labels = zip(*aux)
+        # Count classes
         self.n_watch = sum(self.labels)
         self.n_not_watch = len(self.labels) - sum(self.labels)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx): 
         img = cv2.imread(self.images[idx])
         label = self.labels[idx]
 
-        # TODO MAKE AUGMENTATION LOOKS LIKE THE OTHERS
         if self.mode == "train":
-            img = horizontal_shift(img, 0.2)
-            img = vertical_shift(img, 0.2)
-            img = brightness(img, 0.5, 2)
-            img = zoom(img, 0.9)
-            # img = channel_shift(img, 5)
-            if random.random() < 0.5:
-                img = horizontal_flip(img, False)
-            img = rotation(img, 30)
+            if self.augment[idx]:
+                img = horizontal_shift(img, value=self.aug_values[idx][0])
+                img = vertical_shift(img, value=self.aug_values[idx][1])
+                img = brightness(img, value=self.aug_values[idx][2])
+                img = zoom(img, value=self.aug_values[idx][3])
+                if self.aug_values[idx][4]:
+                    img = horizontal_flip(img, False)
+                img = rotation(img, value=self.aug_values[idx][5])
 
         return img, label
 
@@ -55,8 +63,11 @@ class MARIAData(data.Dataset):
 
 
 if __name__ == "__main__":
+    import torch
     data = MARIAData("D:/datasets/focus_dataset")
-    for elem in data:
+    loader = torch.utils.data.DataLoader(data, batch_size=1, num_workers=2, shuffle=True)
+
+    for elem in loader:
         print(elem[1])
-        cv2.imshow("", elem[0])
+        cv2.imshow("", elem[0][0].detach().numpy())
         cv2.waitKey(0)

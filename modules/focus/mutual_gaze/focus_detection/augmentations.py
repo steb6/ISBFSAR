@@ -8,11 +8,14 @@ def fill(img, h, w):
     return img
 
 
-def horizontal_shift(img, ratio=0.0):
-    if ratio > 1 or ratio < 0:
-        print('Value should be less than 1 and greater than 0')
-        return img
-    ratio = random.uniform(-ratio, ratio)
+def horizontal_shift(img, ratio=0.0, value=None):
+    if value is None:
+        if ratio > 1 or ratio < 0:
+            print('Value should be less than 1 and greater than 0')
+            return img
+        ratio = random.uniform(-ratio, ratio)
+    else:
+        ratio = value
     h, w = img.shape[:2]
     to_shift = w * ratio
     if ratio > 0:
@@ -23,11 +26,14 @@ def horizontal_shift(img, ratio=0.0):
     return img
 
 
-def vertical_shift(img, ratio=0.0):
-    if ratio > 1 or ratio < 0:
-        print('Value should be less than 1 and greater than 0')
-        return img
-    ratio = random.uniform(-ratio, ratio)
+def vertical_shift(img, ratio=0.0, value=None):
+    if value is None:
+        if ratio > 1 or ratio < 0:
+            print('Value should be less than 1 and greater than 0')
+            return img
+        ratio = random.uniform(-ratio, ratio)
+    else:
+        ratio = value
     h, w = img.shape[:2]
     to_shift = h*ratio
     if ratio > 0:
@@ -38,8 +44,9 @@ def vertical_shift(img, ratio=0.0):
     return img
 
 
-def brightness(img, low, high):
-    value = random.uniform(low, high)
+def brightness(img, low=None, high=None, value=None):
+    if value is None:
+        value = random.uniform(low, high)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     hsv = np.array(hsv, dtype = np.float64)
     hsv[:,:,1] = hsv[:,:,1]*value
@@ -51,11 +58,12 @@ def brightness(img, low, high):
     return img
 
 
-def zoom(img, value):
-    if value > 1 or value < 0:
-        print('Value for zoom should be less than 1 and greater than 0')
-        return img
-    value = random.uniform(value, 1)
+def zoom(img, ratio=None, value=None):
+    if value is None:
+        if ratio > 1 or ratio < 0:
+            print('Value for zoom should be less than 1 and greater than 0')
+            return img
+        value = random.uniform(ratio, 1)
     h, w = img.shape[:2]
     h_taken = int(value*h)
     w_taken = int(value*w)
@@ -82,8 +90,11 @@ def horizontal_flip(img, flag):
         return img
 
 
-def rotation(img, angle):
-    angle = int(random.uniform(-angle, angle))
+def rotation(img, angle=None, value=None):
+    if value is None:
+        angle = int(random.uniform(-angle, angle))
+    else:
+        angle = value
     h, w = img.shape[:2]
     M = cv2.getRotationMatrix2D((int(w/2), int(h/2)), angle, 1)
     img = cv2.warpAffine(img, M, (w, h))
