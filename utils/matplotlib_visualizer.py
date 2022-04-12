@@ -1,25 +1,28 @@
-import matplotlib.pyplot as plt
+import matplotlib
 
 
 class MPLPosePrinter:
-    def __init__(self, **args):
-        plt.ion()
-        fig = plt.figure()
-        self.ax = fig.add_subplot(111, projection='3d')
-        self.ax.view_init(90, 90)
-        # Setting the axes properties
-        self.ax.set_xlim3d([-1.0, 1.0])
-        self.ax.set_xlabel('X')
+    def __init__(self):
+        matplotlib.pyplot.ion()
+        fig = matplotlib.pyplot.figure()
+        matplotlib.pyplot.axis('off')
 
-        self.ax.set_ylim3d([-1.0, 1.0])
-        self.ax.set_ylabel('Y')
+        # Add pose axe
+        self.pose_ax = fig.add_subplot(121, projection='3d')
+        self.pose_ax.view_init(90, 90)
+        self.pose_ax.set_xlim3d([-1.0, 1.0])
+        self.pose_ax.set_xlabel('')
+        self.pose_ax.set_ylim3d([-1.0, 1.0])
+        self.pose_ax.set_ylabel('')
+        self.pose_ax.set_zlim3d([-1.0, 1.0])
+        self.pose_ax.set_zlabel('')
+        self.pose_ax.set_title('3D pose')
+        self.pose_ax.set_xticks([], [])
+        self.pose_ax.set_yticks([], [])
+        self.pose_ax.set_zticks([], [])
 
-        self.ax.set_zlim3d([-1.0, 1.0])
-        self.ax.set_zlabel('Z')
-
-        self.ax.set_title('3D Test')
-        # X = np.random.rand(30, 3)
-        # self.sc = self.ax.scatter(X[:, 0], X[:, 1], X[:, 2])
+        # Add image axe
+        self.image_ax = fig.add_subplot(122)
 
         fig.show()
 
@@ -33,15 +36,24 @@ class MPLPosePrinter:
                 for edge in edges:
                     a = p[edge[0]]
                     b = p[edge[1]]
-                    self.ax.plot([a[0], b[0]], [a[1], b[1]], [a[2], b[2]], color)
-        plt.draw()
+                    self.pose_ax.plot([a[0], b[0]], [a[1], b[1]], [a[2], b[2]], color)
+
+    def print_image(self, img):
+        self.image_ax.imshow(img)
+        self.image_ax.set_xticks([], [])
+        self.image_ax.set_yticks([], [])
+
+    @staticmethod
+    def draw():
+        matplotlib.pyplot.draw()
 
     @staticmethod
     def sleep(t):
-        plt.pause(t)
+        matplotlib.pyplot.pause(t)
 
     def clear(self):
-        self.ax.lines.clear()
+        self.pose_ax.lines.clear()
+        self.image_ax.clear()
 
     def set_title(self, title):
-        self.ax.set_title(title)
+        self.pose_ax.set_title(title)

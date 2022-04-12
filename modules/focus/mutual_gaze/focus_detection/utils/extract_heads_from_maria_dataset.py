@@ -10,7 +10,7 @@ import os
 
 if __name__ == "__main__":
     base_path = 'D:/datasets/mutualGaze_dataset/realsense'
-    out_path = 'D:/datasets/focus_dataset'
+    out_path = 'D:/datasets/focus_dataset_heads'
 
     normal = base_path + '/eyecontact_annotations.txt'
     moving = base_path + '/eyecontact_annotations_moving_head.txt'

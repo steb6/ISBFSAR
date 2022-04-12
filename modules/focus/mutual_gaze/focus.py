@@ -1,18 +1,12 @@
-import random
-
-from modules.focus.mutual_gaze.focus_detection.augmentations import horizontal_shift, vertical_shift, brightness, zoom, \
-    horizontal_flip, rotation
 from modules.focus.mutual_gaze.head_detection.utils.misc import get_model
 from modules.hpe.utils.misc import nms_cpu
 import torch.optim
 import copy
 from torchvision import transforms
-from modules.focus.mutual_gaze.focus_detection.model import MutualGazeDetector
+from modules.focus.mutual_gaze.focus_detection.utils.model import MutualGazeDetectorHeads as Model
 import cv2
 import numpy as np
 from tqdm import tqdm
-
-from utils.input import RealSense
 
 WINDOW_SIZE = 1
 
@@ -22,8 +16,8 @@ if __name__ == "__main__":
     head_model.cuda()
     head_model.eval()
 
-    focus_model = MutualGazeDetector()
-    focus_model.load_state_dict(torch.load('modules/focus/mutual_gaze/focus_detection/checkpoints/acc_0.86_loss_0.56.pth'))
+    focus_model = Model()
+    focus_model.load_state_dict(torch.load('modules/focus/mutual_gaze/focus_detection/checkpoints/f1_0.96_loss_0.14_HEADS_my_aug.pth'))
     focus_model.cuda()
     focus_model.eval()
 

@@ -42,7 +42,7 @@ if __name__ == '__main__':
 
     batch_size = 1
     gpu = 0
-    snapshot_path = 'modules/focus/modules/raw/hopenet_robust_alpha1.pkl'
+    snapshot_path = 'modules/focus/gaze_estimation/modules/raw/hopenet_robust_alpha1.pkl'
 
     video = cv2.VideoCapture(0)
 
@@ -50,7 +50,7 @@ if __name__ == '__main__':
     model = hopenet.Hopenet(torchvision.models.resnet.Bottleneck, [3, 4, 6, 3], 66)
 
     # Dlib face detection model
-    cnn_face_detector = dlib.cnn_face_detection_model_v1('modules/focus/modules/raw/mmod_human_face_detector.dat')
+    cnn_face_detector = dlib.cnn_face_detection_model_v1('modules/focus/gaze_estimation/modules/raw/mmod_human_face_detector.dat')
 
     print('Loading snapshot.')
     # Load snapshot
@@ -81,7 +81,6 @@ if __name__ == '__main__':
     frame_num = 1
 
     for frame_num in tqdm(range(1000)):
-        print(frame_num)
 
         ret,frame = video.read()
         if ret == False:

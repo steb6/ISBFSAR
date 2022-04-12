@@ -1,4 +1,4 @@
-from modules.focus.focus import FocusDetector
+from modules.focus.gaze_estimation.focus import FocusDetector
 import os
 from multiprocessing.connection import Listener
 import numpy as np
@@ -9,10 +9,10 @@ from utils.input import JustText
 import cv2
 from playsound import playsound
 from utils.input import RealSense
-from utils.matplotlib_visualizer import MPLPosePrinter as PosePrinter
 from modules.hpe.hpe import HumanPoseEstimator
-from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig
+from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig, FocusConfig
 from utils.params import TRXConfig
+from utils.vispy_visualizer import VISPYVisualizer
 
 
 class ISBFSAR:
@@ -47,9 +47,19 @@ class ISBFSAR:
         self.last_poses = []
         self.skeleton_scale = args.skeleton_scale
 
+        # Create visualizer in different thread if required
         self.debug = debug
         if self.debug:
-            self.pose_visualizer = PosePrinter()
+            from vispy import app
+            import multiprocessing
+            from threading import Thread
+            self.queue = multiprocessing.Queue()
+
+            def create_visualizer(qe):
+                _ = VISPYVisualizer(qe)
+                app.run()
+
+            Thread(target=create_visualizer, args=(self.queue,)).start()
 
     def get_frame(self, img=None):
         """
@@ -114,7 +124,6 @@ class ISBFSAR:
             cv2.putText(img, "fps: {:.2f}".format(fps), (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2,
                         cv2.LINE_AA)
 
-            self.pose_visualizer.clear()
             if pose3d_abs is not None:
                 # Print bbox
                 x1 = int(bbox[0] * 640)
@@ -126,31 +135,13 @@ class ISBFSAR:
                 img = cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
                 # Print pose
-                self.pose_visualizer.print_pose(pose3d_root, edges, 'g')
-                # self.pose_visualizer.print_pose(no_aug, edges, 'r')  # TODO REMOVE DEBUG
+                # self.pose_visualizer.print_pose(pose3d_root, edges, 'g')
+                self.queue.put((pose3d_root, edges, img))
 
                 # Print distance
                 if pose3d_abs is not None:
                     cv2.putText(img, "Dist (M): {:.2f}".format(d), (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2,
                                 cv2.LINE_AA)
-
-                # Print movement
-                #     cv2.putText(img, "Mv: " + '%.2f' % m, (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2,
-                #                 cv2.LINE_AA)
-
-                # # Print 2d results on original frame
-                # if is_fov is not None:
-                #     for point, is_f in zip(pose2d_img, is_fov):
-                #         p = (int(bbox[0] * 640 + point[0]), int(bbox[1] * 480 + point[1]))
-                #         c = (0, 255, 0) if is_f else (0, 0, 255)
-                #         img = cv2.circle(img, p, 5, c, 2)
-
-                # # Print 2d results on bbone input
-                # if is_fov is not None:
-                #     for point, is_fov in zip(pose2d_bbone, is_fov):
-                #         p = (int(point[0]), int(point[1]))
-                #         c = (0, 255, 0) if is_fov else (0, 0, 255)
-                #         bbone_in = cv2.circle(bbone_in, p, 5, c, 2)
 
                 # Print action
                 i = 0
@@ -169,13 +160,14 @@ class ISBFSAR:
 
                 # cv2.imshow("2D predictions", bbone_in.astype(np.uint8))
 
-            cv2.imshow("Cam", img)
-            cv2.waitKey(1)
+            # cv2.imshow("Cam", img)
+            # cv2.waitKey(1)
 
         return img, pose3d_root, results
 
     def run(self):
-        while True:
+        # while True:
+        for _ in tqdm(range(1000)):
             # We received a command
             if self.words_conn.poll():
                 # Get msg
@@ -307,7 +299,7 @@ class ISBFSAR:
 
 if __name__ == "__main__":
 
-    f = FocusDetector()
+    f = FocusDetector(FocusConfig())
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
     n = ActionRecognizer(TRXConfig())
     t = JustText(MainConfig().just_text_port)

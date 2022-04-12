@@ -76,7 +76,7 @@ class GazeEstimatorConfig:
         self.camera_params = 'assets/camera_params.yaml'
         self.normalized_camera_params = 'assets/eth-xgaze.yaml'
         self.normalized_camera_distance = 0.6
-        self.checkpoint = 'modules/focus/modules/raw/eth-xgaze_resnet18.pth'
+        self.checkpoint = 'modules/focus/gaze_estimation/modules/raw/eth-xgaze_resnet18.pth'
         self.image_size = [224, 224]
 
 
