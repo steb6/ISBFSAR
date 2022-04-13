@@ -17,6 +17,8 @@ class ActionRecognizer:
         self.way = args.way
         self.n_joints = args.n_joints
 
+        self.requires_focus = [False for _ in range(args.way)]
+
     def inference(self, pose):
         if pose is None:
             return None
@@ -47,11 +49,12 @@ class ActionRecognizer:
         predicted = predicted[0]
 
         results = {}  # return output as dictionary
+        predicted = predicted[:len(self.support_labels)]
         for k in range(len(predicted)):
             if k < len(self.support_labels):
-                results[self.support_labels[k]] = predicted[k]
+                results[self.support_labels[k]] = (predicted[k], self.requires_focus[k])
             else:
-                results['Action_{}'.format(k)] = predicted[k]
+                results['Action_{}'.format(k)] = (predicted[k], self.requires_focus[k])
         return results
 
     def remove(self, flag):
@@ -61,6 +64,7 @@ class ActionRecognizer:
         index = self.support_labels.index(flag)
         self.support_labels.remove(flag)
         self.support_set[index] = np.zeros_like(self.support_set[index])
+        self.requires_focus[index] = False
 
     def debug(self):
         with open('assets/skeleton_types.pkl', "rb") as inp:
@@ -81,6 +85,7 @@ class ActionRecognizer:
                 self.support_labels.append(raw[1])
             y = np.array([int(self.support_labels.index(raw[1]))])
             self.support_set[y.item()] = x
+            self.requires_focus[y.item()] = raw[2]
 
 
 if __name__ == "__main__":

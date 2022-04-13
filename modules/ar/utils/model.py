@@ -56,8 +56,8 @@ class TemporalCrossTransformer(nn.Module):
         self.tuples_len = len(self.tuples)
 
     def forward(self, support_set, support_labels, queries):
-        n_queries = 1  # queries.shape[0]
-        n_support = 5  # support_set.shape[0]
+        n_queries = queries.shape[0]
+        n_support = support_set.shape[0]
 
         # static pe
         support_set = self.pe(support_set)
