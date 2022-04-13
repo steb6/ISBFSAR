@@ -13,6 +13,8 @@ class VISPYVisualizer:
             self.output_queue.put(self.input_text)
             self.input_text = ''
             self.log.text = ''
+        elif x.text == 'h':
+            self.show = not self.show
         else:
             self.input_text += x.text
         self.input_string.text = self.input_text
@@ -21,6 +23,7 @@ class VISPYVisualizer:
 
         self.input_queue = input_queue
         self.output_queue = output_queue
+        self.show = True
 
         self._timer = app.Timer('auto', connect=self.on_timer, start=True)
         self.input_text = ''
@@ -55,6 +58,7 @@ class VISPYVisualizer:
         # Info
         self.b2 = grid.add_view(row=0, col=1)
         self.b2.camera = scene.PanZoomCamera(rect=(0, 0, 1, 1))
+        self.b2.camera.interactive = False
         self.b2.border_color = (0.5, 0.5, 0.5, 1)
         self.fps = Text('FPS:', color='white', rotation=0, anchor_x="left", anchor_y="bottom",
                         font_size=18, pos=(0.5, 1))
@@ -67,6 +71,7 @@ class VISPYVisualizer:
         # Image
         b3 = grid.add_view(row=1, col=0)
         b3.camera = scene.PanZoomCamera(rect=(0, 0, 640, 480))
+        b3.camera.interactive = False
         b3.border_color = (0.5, 0.5, 0.5, 1)
         self.image = Image()
         # self.focus.pos = 20, 20
@@ -75,6 +80,7 @@ class VISPYVisualizer:
         # Commands
         b4 = grid.add_view(row=1, col=1)
         b4.camera = scene.PanZoomCamera(rect=(0, 0, 1, 1))
+        b4.camera.interactive = False
         b4.border_color = (0.5, 0.5, 0.5, 1)
         self.desc = Text('Insert action', color='white', rotation=0, anchor_x="left", anchor_y="bottom",
                          font_size=18, pos=(0, 1))
@@ -87,10 +93,18 @@ class VISPYVisualizer:
         b4.add(self.log)
 
     def on_timer(self, _):
-        try:
-            elements = self.input_queue.get_nowait()
-        except Empty:
+        # Check if visualized is disabled
+        if not self.show:
             return
+        # Check if there is something to show
+        elements = []
+        while not self.input_queue.empty():
+            elements.append(self.input_queue.get())
+        if len(elements) == 0:
+            return
+        print(len(elements))
+        elements = elements[-1]
+        # Parse elements
         elements = elements[0]
         if "log" in elements.keys():
             self.log.text = elements["log"]
