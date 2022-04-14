@@ -10,8 +10,10 @@ import cv2
 # ckpt_path = "modules/focus/mutual_gaze/focus_detection/checkpoints/f1_0.82_loss_7.24_HEADS_maria_aug.pth"
 # {'test/accuracy': '0.91', 'test/precision': '0.88', 'test/recall': '0.96', 'test/f1': '0.92'}
 
-ckpt_path = "modules/focus/mutual_gaze/focus_detection/checkpoints/f1_0.96_loss_0.14_HEADS_my_aug.pth"
+ckpt_path = "modules/focus/mutual_gaze/focus_detection/checkpoints/MLP/sess_0_acc_0.75.pth"
 # {'test/accuracy': '0.88', 'test/precision': '0.90', 'test/recall': '0.85', 'test/f1': '0.87'}
+
+threshold = 0.5
 
 if __name__ == "__main__":
     test_data = MARIAData("D:/datasets/focus_dataset_heads", mode="test", split_number=0)
@@ -50,10 +52,10 @@ if __name__ == "__main__":
         ys.extend(y.cpu().detach().numpy().tolist())
         imgs.extend([_ for _ in img.detach().cpu().numpy()])
 
-        test_accuracies.append(metrics.accuracy_score(y.detach().cpu() > 0.5, out.detach().cpu() > 0.5))
-        test_precisions.append(metrics.precision_score(y.detach().cpu() > 0.5, out.detach().cpu() > 0.5))
-        test_recalls.append(metrics.recall_score(y.detach().cpu() > 0.5, out.detach().cpu() > 0.5))
-        test_f1s.append(metrics.f1_score(y.detach().cpu() > 0.5, out.detach().cpu() > 0.5))
+        test_accuracies.append(metrics.accuracy_score(y.detach().cpu() > threshold, out.detach().cpu() > threshold))
+        test_precisions.append(metrics.precision_score(y.detach().cpu() > threshold, out.detach().cpu() > threshold))
+        test_recalls.append(metrics.recall_score(y.detach().cpu() > threshold, out.detach().cpu() > threshold))
+        test_f1s.append(metrics.f1_score(y.detach().cpu() > threshold, out.detach().cpu() > threshold))
 
     print({"test/accuracy": "{:.2f}".format(sum(test_accuracies) / len(test_accuracies)),
            "test/precision": "{:.2f}".format(sum(test_precisions) / len(test_precisions)),

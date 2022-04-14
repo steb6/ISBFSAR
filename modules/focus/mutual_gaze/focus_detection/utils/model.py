@@ -51,9 +51,10 @@ class BinaryClassifier(torch.nn.Module):
 class ResNetModel(torch.nn.Module):
     def __init__(self):
         super(ResNetModel, self).__init__()
-        self.model = models.resnet18(pretrained=True)
-        # self.model = models.mobilenet_v3_small(pretrained=True)
+        # self.model = models.resnet18(pretrained=True)
+        self.model = models.mobilenet_v3_small(pretrained=True)
         # self.model = models.vgg19(pretrained=True)
+        # self.model = models.inception_v3(pretrained=True)
 
     def forward(self, x):
         return self.model(x)

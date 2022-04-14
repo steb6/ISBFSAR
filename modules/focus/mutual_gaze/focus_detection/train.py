@@ -37,7 +37,7 @@ if __name__ == "__main__":
         model.train()
 
         loss_fn = BCELoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-6)
 
         run = wandb.init(project="mutual_gaze", reinit=True, name="Session_{}".format(sess),
                          settings=wandb.Settings(start_method='fork'))

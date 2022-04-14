@@ -21,16 +21,16 @@ class ActionRecognizer:
 
     def inference(self, pose):
         if pose is None:
-            return None
+            return {}
 
         if len(self.support_labels) == 0:  # no class to predict
-            return None
+            return {}
 
         pose = pose.reshape(-1)
 
         self.previous_frames.append(pose)
         if len(self.previous_frames) < self.seq_len:  # few samples
-            return None
+            return {}
         elif len(self.previous_frames) == self.seq_len + 1:
             self.previous_frames = self.previous_frames[1:]  # add as last frame
 

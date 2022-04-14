@@ -130,8 +130,7 @@ class ISBFSAR:
         return img, pose3d_root, results
 
     def run(self):
-        # while True:
-        for _ in tqdm(range(1000)):
+        while True:
             # We received a command
             try:
                 msg = self.input_queue.get_nowait()

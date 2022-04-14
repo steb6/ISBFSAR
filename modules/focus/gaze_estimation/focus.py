@@ -137,7 +137,7 @@ class FocusDetector:
 
             # Print focus
             self.focuses.append(focus)
-            self.focuses = self.focuses[-16:]
+            self.focuses = self.focuses[-3:]
             self.is_focus = self.focuses.count(True) > len(self.focuses) / 2
 
         return focus, fc
