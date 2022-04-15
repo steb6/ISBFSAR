@@ -1,24 +1,13 @@
-import threading
-from multiprocessing.connection import Client
 import numpy as np
 import pyrealsense2 as rs
 
 
-class JustText(threading.Thread):
-    def __init__(self, port):
-        # Connect to master
-        super().__init__()
-        self.conn = None
-        self.port = port
-
-    def run(self):
-        address = ('localhost', self.port)
-        self.conn = Client(address, authkey=b'secret password')
-        while True:
-            msg = input("Enter command here: ")
-            if msg == "close" or msg == "exit" or msg == "quit":
-                break
-            self.conn.send(msg)
+def just_text(queue):
+    while True:
+        msg = input("Enter command here: ")
+        if msg == "close" or msg == "exit" or msg == "quit":
+            break
+        queue.put(msg)
 
 
 class RealSense:
@@ -53,14 +42,14 @@ class RealSense:
 
     def read(self):
         frames = self.pipeline.wait_for_frames()
-        aligned_frames = self.align.process(frames)
+        # aligned_frames = self.align.process(frames)
 
         # depth_frame = aligned_frames.get_depth_frame()  # aligned_depth_frame is a 640x480 depth image
         # color_frame = aligned_frames.get_color_frame()
-        depth_frame = frames.get_depth_frame()  # aligned_depth_frame is a 640x480 depth image
+        # depth_frame = frames.get_depth_frame()  # aligned_depth_frame is a 640x480 depth image
         color_frame = frames.get_color_frame()
 
-        depth_image = np.asanyarray(depth_frame.get_data())
+        # depth_image = np.asanyarray(depth_frame.get_data())
         color_image = np.asanyarray(color_frame.get_data())
 
         return True, color_image

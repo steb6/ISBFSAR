@@ -10,13 +10,13 @@ import cv2
 # ckpt_path = "modules/focus/mutual_gaze/focus_detection/checkpoints/f1_0.82_loss_7.24_HEADS_maria_aug.pth"
 # {'test/accuracy': '0.91', 'test/precision': '0.88', 'test/recall': '0.96', 'test/f1': '0.92'}
 
-ckpt_path = "modules/focus/mutual_gaze/focus_detection/checkpoints/MLP/sess_0_acc_0.75.pth"
+ckpt_path = "modules/focus/mutual_gaze/focus_detection/checkpoints/MNET3/sess_4_acc_0.84.pth"
 # {'test/accuracy': '0.88', 'test/precision': '0.90', 'test/recall': '0.85', 'test/f1': '0.87'}
 
 threshold = 0.5
 
 if __name__ == "__main__":
-    test_data = MARIAData("D:/datasets/focus_dataset_heads", mode="test", split_number=0)
+    test_data = MARIAData("D:/datasets/focus_dataset_heads", mode="test", split_number=4)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=32, num_workers=2, shuffle=True)
 
     model = Model()

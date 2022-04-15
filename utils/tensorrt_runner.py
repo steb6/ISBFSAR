@@ -1,4 +1,4 @@
-import pycuda.autoinit
+import pycuda.autoinit  # IMPORTANT! LEAVE THIS IMPORT HERE
 import numpy as np
 import tensorrt as trt
 import pycuda.driver as cuda

@@ -8,7 +8,8 @@ class VISPYVisualizer:
 
     def printer(self, x):
         if x.text == '\b':
-            self.input_text = self.input_text[:-1]
+            if len(self.input_text) > 1:
+                self.input_text = self.input_text[:-1]
             self.log.text = ''
         elif x.text == '\r':
             self.output_queue.put(self.input_text[1:])  # Do not send '<'
@@ -19,6 +20,11 @@ class VISPYVisualizer:
         else:
             self.input_text += x.text
         self.input_string.text = self.input_text
+
+    @staticmethod
+    def create_visualizer(qi, qo):
+        _ = VISPYVisualizer(qi, qo)
+        app.run()
 
     def __init__(self, input_queue, output_queue):
 
@@ -41,7 +47,6 @@ class VISPYVisualizer:
         # Plot
         b1 = grid.add_view(row=0, col=0)
         b1.border_color = (0.5, 0.5, 0.5, 1)
-        # b1.camera = scene.TurntableCamera(45, elevation=-90, azimuth=0, distance=2)  # TODO OLD
         b1.camera = scene.TurntableCamera(45, elevation=30, azimuth=0, distance=2)
         self.lines = []
         Plot3D = scene.visuals.create_visual_node(visuals.LinePlotVisual)
@@ -63,12 +68,15 @@ class VISPYVisualizer:
         self.b2.camera = scene.PanZoomCamera(rect=(0, 0, 1, 1))
         self.b2.camera.interactive = False
         self.b2.border_color = (0.5, 0.5, 0.5, 1)
-        self.fps = Text('FPS:', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
-                        font_size=12, pos=(0.75, 0.9))
-        self.focus = Text('Non focus', color='green', rotation=0, anchor_x="center", anchor_y="bottom",
-                          font_size=12, pos=(0.25, 0.9))
-        self.b2.add(self.fps)
+        self.distance = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
+                             font_size=12, pos=(0.25, 0.9))
+        self.b2.add(self.distance)
+        self.focus = Text('', color='green', rotation=0, anchor_x="center", anchor_y="bottom",
+                          font_size=12, pos=(0.5, 0.9))
         self.b2.add(self.focus)
+        self.fps = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
+                        font_size=12, pos=(0.75, 0.9))
+        self.b2.add(self.fps)
         self.actions = {}
 
         # Image
@@ -100,16 +108,12 @@ class VISPYVisualizer:
         b4.add(self.log)
 
     def on_timer(self, _):
-        # Check if visualized is disabled
         if not self.show:
             return
         # Check if there is something to show
-        elements = []
-        while not self.input_queue.empty():
-            elements.append(self.input_queue.get())
-        if len(elements) == 0:
+        elements = self.input_queue.get()
+        if not elements:
             return
-        elements = elements[-1]
         # Parse elements
         elements = elements[0]
         if "log" in elements.keys():
@@ -119,9 +123,11 @@ class VISPYVisualizer:
             pose = elements["pose"]
             img = elements["img"]
             focus = elements["focus"]
-            fps_without_vis = elements["fps_without_vis"]
+            fps = elements["fps"]
             results = elements["actions"]
-            # Rotate pose of 90 degree along y axe
+            distance = elements["distance"]
+
+            # POSE
             theta = 90
             R = np.matrix([[1, 0, 0],
                            [0, math.cos(theta), -math.sin(theta)],
@@ -130,14 +136,19 @@ class VISPYVisualizer:
             # pose[:, 1] += min(pose[:, 1])
             for i, edge in enumerate(edges):
                 self.lines[i].set_data((pose[[edge[0], edge[1]]]))
+
+            # IMAGE
             self.image.set_data(img)
+
+            # INFO
             if focus:
                 self.focus.text = "FOCUS"
                 self.focus.color = "green"
             else:
                 self.focus.text = "NOT FOCUS"
                 self.focus.color = "red"
-            self.fps.text = "FPS: {:.2f}".format(fps_without_vis)
+            self.fps.text = "FPS: {:.2f}".format(fps)
+            self.distance.text = "DIST: {:.2f}m".format(distance)
             # Print action
             i = 0
             m = max([_[0] for _ in results.values()]) if len(results) > 0 else 0
@@ -154,7 +165,10 @@ class VISPYVisualizer:
                 else:
                     color = "red"
                 if r in self.actions.keys():
-                    self.actions[r].text = "{}: {:.2f}, {}".format(r, score, requires_focus)
+                    if requires_focus:
+                        self.actions[r].text = "{}: {:.2f} (0_0)".format(r, score)
+                    else:
+                        self.actions[r].text = "{}: {:.2f}".format(r, score)
                 else:
                     self.actions[r] = Text('', rotation=0, anchor_x="center", anchor_y="bottom", font_size=12)
                     self.b2.add(self.actions[r])

@@ -37,10 +37,10 @@ if __name__ == "__main__":
         model.train()
 
         loss_fn = BCELoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-6)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-7)
 
         run = wandb.init(project="mutual_gaze", reinit=True, name="Session_{}".format(sess),
-                         settings=wandb.Settings(start_method='fork'))
+                         settings=wandb.Settings(start_method='thread'))
         wandb.watch(model, log='all', log_freq=LOG_EVERY)
 
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -129,7 +129,7 @@ if __name__ == "__main__":
         test_f1s = []
         model.load_state_dict(best_model)
         model.eval()
-        for x, y in tqdm(train_loader, desc="Test session {}".format(sess)):
+        for x, y in tqdm(test_loader, desc="Test session {}".format(sess)):
             x = x.permute(0, 3, 1, 2)
             x = x / 255.
             x = normalize(x)

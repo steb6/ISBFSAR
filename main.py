@@ -1,23 +1,22 @@
-from queue import Empty
 from modules.focus.gaze_estimation.focus import FocusDetector
 import os
-from multiprocessing.connection import Listener
 import numpy as np
 from tqdm import tqdm
 import time
 from modules.ar.trx import ActionRecognizer
-from utils.input import JustText
 import cv2
 from playsound import playsound
-from utils.input import RealSense
+from utils.input import RealSense, just_text
 from modules.hpe.hpe import HumanPoseEstimator
 from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig, FocusConfig
 from utils.params import TRXConfig
-from utils.vispy_visualizer import VISPYVisualizer
+from utils.output import VISPYVisualizer
+import multiprocessing
+from threading import Thread
 
 
 class ISBFSAR:
-    def __init__(self, hpe, ar, text, focus, args, debug=True):
+    def __init__(self, hpe, ar, focus, args, debug=True):
         self.hpe = hpe
         self.ar = ar
         self.focus = focus
@@ -44,24 +43,18 @@ class ISBFSAR:
         self.last_poses = []
         self.skeleton_scale = args.skeleton_scale
 
-        # Create input-output
+        # Create input
+        self.input_queue = multiprocessing.Queue()
+        self.input_thread = Thread(target=just_text, args=(self.input_queue,))
+        self.input_thread.start()
+
+        # Create output
         self.debug = debug
         if self.debug:
-            from vispy import app
-            import multiprocessing
-            from threading import Thread
             self.output_queue = multiprocessing.Queue()
-            self.input_queue = multiprocessing.Queue()
-
-            def create_visualizer(qi, qo):
-                _ = VISPYVisualizer(qi, qo)
-                app.run()
-
-            # create_visualizer(self.output_queue, self.input_queue)
-            Thread(target=create_visualizer, args=(self.output_queue, self.input_queue)).start()
-        else:
-            text.start()  # start Client
-            self.words_conn = Listener(('localhost', args.just_text_port), authkey=b'secret password').accept()
+            self.output_thread = Thread(target=VISPYVisualizer.create_visualizer,
+                                        args=(self.output_queue, self.input_queue))
+            self.output_thread.start()
 
     def get_frame(self, img=None):
         start = time.time()
@@ -73,16 +66,16 @@ class ISBFSAR:
                 raise Exception("Cannot grab frame!")
 
         # Estimate 3d skeleton
-        pose3d_abs, edges, bbone_in, pose2d_bbone, is_fov, bbox, pose3d_abs_no_aug, pose2d_img = self.hpe.estimate(img)
+        pose3d_abs, edges, bbox = self.hpe.estimate(img)
 
         # TODO Compute Distance
-        # if pose3d_abs is not None:
-        #     cam_pos = np.array([0, 0, 0])
-        #     man_pose = np.array(pose3d_abs)
-        #     d = np.sqrt(np.sum(np.square(cam_pos - man_pose))) / 1000.
+        d = None
+        if pose3d_abs is not None:
+            cam_pos = np.array([0, 0, 0])
+            man_pose = np.array(pose3d_abs)
+            d = np.sqrt(np.sum(np.square(cam_pos - man_pose)))
 
         # Normalize
-
         pose3d_root = pose3d_abs - pose3d_abs[0, :] if pose3d_abs is not None else None
         # pose = pose / self.skeleton_scale  # Normalize  (MetrABS is a cube with sides of 2.2 M)
 
@@ -104,15 +97,9 @@ class ISBFSAR:
         fps = sum(fps_s) / len(fps_s)
 
         if self.debug:
-
             if pose3d_abs is not None:
                 # Print bbox
-                x1 = int(bbox[0] * 640)
-                y1 = int(bbox[1] * 480)
-                x2 = int(bbox[2] * 640)
-                y2 = int(bbox[3] * 480)
-                # confidence = elem[4]
-                # class_id = elem[5]
+                x1, x2, y1, y2 = bbox
                 img = cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
                 # Send to visualizer
@@ -121,20 +108,26 @@ class ISBFSAR:
                 elements = {"img": img,
                             "pose": pose3d_root,
                             "edges": edges,
-                            "fps_without_vis": fps,
+                            "fps": fps,
                             "focus": focus,
-                            "actions": results
+                            "actions": results,
+                            "distance": d
                             }
                 self.output_queue.put((elements,))
 
         return img, pose3d_root, results
 
+    def log(self, msg):
+        self.output_queue.put(({"log": msg},))
+        print(msg)
+
     def run(self):
-        while True:
+        # while True:
+        for _ in tqdm(list(range(10000))):
             # We received a command
-            try:
-                msg = self.input_queue.get_nowait()
-            except Empty:
+            if not self.input_queue.empty():
+                msg = self.input_queue.get()
+            else:
                 # We didn't receive a command, just do inference
                 _, _, _ = self.get_frame()
                 continue
@@ -156,17 +149,19 @@ class ISBFSAR:
                 self.test_video(msg[1])
 
             else:
-                self.output_queue.put(({"log": "Not a valid command!"},))
+                self.log("Not a valid command!")
 
-        # clean
-        self.words_conn.close()
+        # clean  # TODO TERMINATE THREADS
+        self.input_thread.join()
+        self.output_thread.join()
 
     def test_video(self, path):
         if not os.path.exists(path):
-            print("Video file does not exists!")
+            self.log("Video file does not exists!")
             return
-        # self.cap.release()
+
         video = cv2.VideoCapture(path)
+        video_length = video.get(cv2.CAP_PROP_FRAME_COUNT)
         i = 0
         fps = video.get(cv2.CAP_PROP_FPS)
         ret, img = video.read()
@@ -175,79 +170,84 @@ class ISBFSAR:
             key = cv2.waitKey(1)
             if key > -1:
                 break
-            print(i)
-            i += 1
+            self.log("{:.2f}%".format((i / (video_length - 1)) * 100))
             _, _, _ = self.get_frame(img)
 
             n_skip = int((time.time() - start) * fps)
             for _ in range(n_skip):
                 _, _ = video.read()
+                i += 1
 
             ret, img = video.read()
-
+            i += 1
+        self.log("100%")
         video.release()
-        # self.cap = cv2.VideoCapture(params["cam_id"])
-        # self.cap.set(3, params["cam_width"])
-        # self.cap.set(4, params["cam_height"])
 
     def forget_command(self, flag):
         self.ar.remove(flag)
 
     def learn_command(self, flag):
         # If a string is provided
-        # if '.' not in flag:
         requires_focus = "-focus" in flag
-        flag = flag[0]
-        self.output_queue.put(({"log": "WAIT..."},))
-        now = time.time()
-        while (time.time() - now) < 3:
-            _, _, _ = self.get_frame()
-        self.output_queue.put(({"log": "GO!"},))
+        if '.' not in flag[0]:
+            flag = flag[0]
 
-        playsound('assets' + os.sep + 'start.wav')
-        poses = []
-        with tqdm(total=self.window_size, position=0, leave=True) as progress_bar:
+            self.log("WAIT...")
+            now = time.time()
+            while (time.time() - now) < 3:
+                _, _, _ = self.get_frame()
+
+            self.log("GO!")
+            playsound('assets' + os.sep + 'start.wav')
+            poses = []
+            i = 0
             while len(poses) < self.window_size:
                 _, pose, _ = self.get_frame()
                 if pose is not None:
                     poses.append(pose)
-                    progress_bar.update()
-        playsound('assets' + os.sep + 'stop.wav')
+                self.log("{:.2f}%".format((i / (self.window_size-1))*100))
+                i += 1
+            data = np.stack(poses)
+            playsound('assets' + os.sep + 'stop.wav')
+            self.log("100%")
         # If a path to a video is provided
-        # else:
-        #     if not os.path.exists(flag):
-        #         print("Video file does not exists!")
-        #         return
-        #     # self.cap.release()
-        #     video = cv2.VideoCapture(flag)
-        #     poses = []
-        #     fps = video.get(cv2.CAP_PROP_FPS)
-        #     ret, img = video.read()
-        #     while ret:
-        #         start = time.time()
-        #         img = cv2.resize(img, (self.cam_width, self.cam_height))
-        #         cv2.waitKey(1)
-        #         _, pose, _ = self.get_frame(img)
-        #
-        #         if pose is not None:
-        #             poses.append(pose)
-        #
-        #         n_skip = int((time.time() - start) * fps)
-        #         for _ in range(n_skip):
-        #             _, _ = video.read()
-        #
-        #         ret, img = video.read()
-        #
-        #     video.release()
-        #     self.cap = cv2.VideoCapture(params["cam_id"])
-        #     self.cap.set(3, params["cam_width"])
-        #     self.cap.set(4, params["cam_height"])
-        #
-        #     flag = flag.split('/')[1].split('.')[0]  # between / and .
+        else:
+            if not os.path.exists(flag[0]):
+                self.log("Video file does not exist!")
+                return
+            # self.cap.release()
+            video = cv2.VideoCapture(flag[0])
+            poses = []
+            fps = video.get(cv2.CAP_PROP_FPS)
+            video_length = video.get(cv2.CAP_PROP_FRAME_COUNT)
+            ret, img = video.read()
+            i = 0
+            while ret:
+                start = time.time()
+                img = cv2.resize(img, (self.cam_width, self.cam_height))
+                cv2.waitKey(1)
+                _, pose, _ = self.get_frame(img)
 
-        self.output_queue.put(({"log": "Collected " + str(len(poses)) + " frames"},))
+                if pose is not None:
+                    poses.append(pose)
 
-        data = (np.stack(poses), flag, requires_focus)
+                n_skip = int((time.time() - start) * fps)
+                for _ in range(n_skip):
+                    _, _ = video.read()
+                    i += 1
+
+                ret, img = video.read()
+                self.log("{:.2f}%".format((i / (video_length-1))*100))
+                i += 1
+            self.log("100%")
+            video.release()
+            flag = flag[0].split('/')[-1].split('.')[0]  # between / and .
+            data = np.stack(poses)
+            data = data[:(len(data) - (len(data) % self.window_size))]
+            data = data[list(range(0, len(data), int(len(data) / self.window_size)))]
+
+        self.log("Success!")
+        data = (data, flag, requires_focus)
         self.ar.train(data)
 
 
@@ -256,8 +256,7 @@ if __name__ == "__main__":
     f = FocusDetector(FocusConfig())
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
     n = ActionRecognizer(TRXConfig())
-    t = JustText(MainConfig().just_text_port)
 
-    master = ISBFSAR(h, n, t, f, MainConfig(), debug=True)
+    master = ISBFSAR(h, n, f, MainConfig(), debug=True)
 
     master.run()

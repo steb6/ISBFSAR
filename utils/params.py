@@ -7,11 +7,9 @@ n_joints = 30
 class MainConfig(object):
     def __init__(self):
         self.cam = "realsense"
-        self.ar = "trx"
         self.cam_width = 640
         self.cam_height = 480
         self.window_size = seq_len
-        self.just_text_port = 6050
         self.skeleton_scale = 2200.
 
 

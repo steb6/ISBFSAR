@@ -17,12 +17,12 @@ if __name__ == "__main__":
     head_model.eval()
 
     focus_model = Model()
-    focus_model.load_state_dict(torch.load('modules/focus/mutual_gaze/focus_detection/checkpoints/MLP/sess_3_acc_0.84.pth'))
+    focus_model.load_state_dict(torch.load('modules/focus/mutual_gaze/focus_detection/checkpoints/MNET3/sess_1_acc_0.80.pth'))
     focus_model.cuda()
     focus_model.eval()
 
     # cam = cv2.VideoCapture('assets/test_gaze_with_mask.mp4')
-    cam = cv2.VideoCapture(0)
+    cam = cv2.VideoCapture('video.mp4')
     # cam = RealSense(1920, 1080)
 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],

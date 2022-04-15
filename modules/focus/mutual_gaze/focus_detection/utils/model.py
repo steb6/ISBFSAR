@@ -29,7 +29,7 @@ class BinaryClassifier(torch.nn.Module):
     def __init__(self, input_size):
         super(BinaryClassifier, self).__init__()
         self.layer1 = torch.nn.Linear(input_size, 256)
-        self.drop1 = torch.nn.Dropout(0.2)
+        self.drop1 = torch.nn.Dropout(0.4)
         self.act1 = torch.nn.ReLU()
         # self.layer2 = torch.nn.Linear(256, 64)
         # self.drop2 = torch.nn.Dropout(0.2)

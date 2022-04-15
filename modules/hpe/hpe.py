@@ -73,7 +73,7 @@ class HumanPoseEstimator:
             humans.sort(key=lambda x: x[4], reverse=True)  # Sort with decreasing probability
             human = humans[0]
         else:
-            return None, None, None, None, None, None, None, None
+            return None, None, None
 
         # Preprocess for BackBone
         x1 = int(human[0] * frame.shape[1]) if int(human[0] * frame.shape[1]) > 0 else 0
@@ -146,21 +146,21 @@ class HumanPoseEstimator:
 
         # If less than 1/4 of the joints is visible, then the resulting pose will be weird
         if is_predicted_to_be_in_fov.sum() < is_predicted_to_be_in_fov.size/4:
-            return None, None, None, None, None, None, None, None
+            return None, None, None
 
-        # Move the skeleton into estimated absolute position if necessary  # TODO ADD AGAIN
+        # Move the skeleton into estimated absolute position if necessary  # TODO fIX
         # pred3d = reconstruct_absolute(pred2d, pred3d, new_K, is_predicted_to_be_in_fov, weak_perspective=False)
 
         # Go back in original space (without augmentation and homography)
         pred3d = pred3d @ homo_inv
 
-        # TODO TRY 1
+        # # TODO TRY 1
+        # # pred2d_original = np.concatenate((pred2d, np.ones_like(pred2d)[..., :1]), axis=-1) @ homo_inv
+        # # pred2d_original = pred2d_original[..., :2]
+        # # TODO TRY 2
         # pred2d_original = np.concatenate((pred2d, np.ones_like(pred2d)[..., :1]), axis=-1) @ homo_inv
         # pred2d_original = pred2d_original[..., :2]
-        # TODO TRY 2
-        pred2d_original = np.concatenate((pred2d, np.ones_like(pred2d)[..., :1]), axis=-1) @ homo_inv
-        pred2d_original = pred2d_original[..., :2]
-        # TODO END TRY
+        # # TODO END TRY
 
         # Get correct skeleton
         pred3d = (pred3d.swapaxes(1, 2) @ self.expand_joints).swapaxes(1, 2)
@@ -177,47 +177,35 @@ class HumanPoseEstimator:
             pred3d[aug_should_flip, self.joint_mirror_map[k, 1]] = aux
 
         # Average test time augmentation results
-        no_aug = pred3d[2]  # TODO REMOVE DEBUG
         pred3d = pred3d.mean(axis=0)
-        bbone_in = bbone_in[int(self.num_aug/2)]
-        pred2d = pred2d[int(self.num_aug/2)]
-        pred2d_original = pred2d_original[int(self.num_aug/2)]
-        is_predicted_to_be_in_fov = is_predicted_to_be_in_fov[int(self.num_aug/2)] if is_predicted_to_be_in_fov is not None else None
 
         # is_pose_consistent_with_box(pred2d, human)
+        # # TODO EXPERIMENT DEBUG
+        # bbone_in = bbone_in.astype(np.uint8)[2]
+        # for elem, label in zip(pred2d[2], is_predicted_to_be_in_fov[2]):
+        #     bbone_in = cv2.circle(bbone_in, (int(elem[0]), int(elem[1])), 2,
+        #                              (0, 255, 0) if label else (0, 0, 255), 2, cv2.LINE_AA)
+        # cv2.imshow("BBONE", bbone_in)
+        # cv2.waitKey(1)
+        # # TODO END EXPERIMENT
 
-        return pred3d, edges, bbone_in, pred2d, is_predicted_to_be_in_fov, human, no_aug, pred2d_original
+        return pred3d, edges, (x1, x2, y1, y2)
 
 
 if __name__ == "__main__":
     from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig
     from tqdm import tqdm
-    from utils.matplotlib_visualizer import MPLPosePrinter
-    import matplotlib.pyplot as plt
     import cv2
 
     args = MainConfig()
 
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
-    pose_visualizer = MPLPosePrinter()
 
     # cap = RealSense(width=args.cam_width, height=args.cam_height)
-    cap = cv2.VideoCapture('Test.mp4')
+    cap = cv2.VideoCapture('assets/dance.mp4')
 
     for _ in tqdm(range(10000)):
         ret, img = cap.read()
         img = img[:, 240:-240, :]
         img = cv2.resize(img, (640, 480))
-        pose3d, ed, bbone_input, pose2d, is_fov, _, _, _ = h.estimate(img)
-        if pose3d is not None:
-            pose3d -= pose3d[0]  # Center
-
-            pose_visualizer.clear()
-            pose_visualizer.print_pose(pose3d, ed)
-
-            bbone_input = bbone_input.astype(np.uint8)
-            for elem, label in zip(pose2d, is_fov):
-                bbone_input = cv2.circle(bbone_input, (int(elem[0]), int(elem[1])), 2, (0, 255, 0) if label else (0, 0, 255), 2, cv2.LINE_AA)
-            cv2.imshow("BBONE", bbone_input)
-            cv2.imshow("rgb", img)
-            plt.pause(0.001)
+        pose3d, ed, _ = h.estimate(img)
