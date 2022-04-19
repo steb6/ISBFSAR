@@ -109,20 +109,29 @@ def postprocess_yolo_output(boxes, confidences, conf_thresh=0.3, nms_thresh=0.7,
 
 # TODO DEBUG TRYING TO ADD METRABS FUNCTION
 
-# def reconstruct_ref_weakpersp(normalized_2d, coords3d_rel, validity_mask):
-#     mean3d, stdev3d = tfu.mean_stdev_masked(
-#         coords3d_rel[..., :2], validity_mask, items_axis=1, dimensions_axis=2)
-#
-#     mean2d, stdev2d = tfu.mean_stdev_masked(
-#         normalized_2d[..., :2], validity_mask, items_axis=1, dimensions_axis=2)
-#
-#     stdev2d = tf.maximum(stdev2d, 1e-5)
-#     stdev3d = tf.maximum(stdev3d, 1e-5)
-#
-#     old_mean = tfu.reduce_mean_masked(coords3d_rel, validity_mask, axis=1, keepdims=True)
-#     new_mean_z = tf.math.divide_no_nan(stdev3d, stdev2d)
-#     new_mean = to_homogeneous(mean2d) * new_mean_z
-#     return tf.squeeze(new_mean - old_mean, 1)
+def reconstruct_ref_weakpersp(normalized_2d, coords3d_rel, validity_mask):
+    # mean3d, stdev3d = tfu.mean_stdev_masked(
+    #     coords3d_rel[..., :2], validity_mask, items_axis=1, dimensions_axis=2)
+    mean3d, stdev3d = np.ma.std(coords3d_rel[..., :2], validity_mask)
+
+    # mean2d, stdev2d = tfu.mean_stdev_masked(
+    #     normalized_2d[..., :2], validity_mask, items_axis=1, dimensions_axis=2)
+    mean2d, stdev2d = np.ma.std(normalized_2d[..., :2], validity_mask)
+
+    stdev2d = np.maximum(stdev2d, 1e-5)
+    stdev3d = np.maximum(stdev3d, 1e-5)
+    # stdev2d = tf.maximum(stdev2d, 1e-5)
+    # stdev3d = tf.maximum(stdev3d, 1e-5)
+
+    old_mean = np.ma.max(coords3d_rel, validity_mask)
+    new_mean_z = np.ma.divide(stdev3d, stdev2d)
+    new_mean = to_homogeneous(mean2d) * new_mean_z
+    return np.squeze(new_mean - old_mean, 1)
+
+    # old_mean = tfu.reduce_mean_masked(coords3d_rel, validity_mask, axis=1, keepdims=True)
+    # new_mean_z = tf.math.divide_no_nan(stdev3d, stdev2d)
+    # new_mean = to_homogeneous(mean2d) * new_mean_z
+    # return tf.squeeze(new_mean - old_mean, 1)
 
 
 def to_homogeneous(x):
@@ -145,14 +154,14 @@ def reconstruct_ref_fullpersp(normalized_2d, coords3d_rel, validity_mask):
     """
 
     def rms_normalize(x):  # It makes the norm of the vector equal to one
-        scale = np.sqrt(np.mean(np.square(x)))
-        normalized = x / scale
+        scale = np.sqrt(np.mean(np.square(x), axis=1))
+        normalized = (x[..., 0] / scale)[..., None]
         return scale, normalized
 
-    n_batch = np.shape(normalized_2d)[0]  # 1
-    n_points = normalized_2d.shape[1]  # 32
-    eyes = np.tile(np.expand_dims(np.eye(2, 2), 0), [n_batch, n_points, 1])  # 1,0; 0,1; 1,0; 0,1;  1 64 2
-    scale2d, reshaped2d = rms_normalize(np.reshape(normalized_2d, [-1, n_points * 2, 1]))  # 1 64 1
+    n_batch = np.shape(normalized_2d)[0]
+    n_points = normalized_2d.shape[1]
+    eyes = np.tile(np.expand_dims(np.eye(2, 2), 0), [n_batch, n_points, 1])
+    scale2d, reshaped2d = rms_normalize(np.reshape(normalized_2d, [-1, n_points * 2, 1]))
     A = np.concatenate([eyes, -reshaped2d], axis=2)
     # A: 1, 0, x1; 0, 1, y1; 1, 0, x2; 0, 1, y2; ... its the A matrix of linear system
     rel_backproj = normalized_2d * coords3d_rel[:, :, 2:] - coords3d_rel[:, :, :2]
@@ -161,8 +170,9 @@ def reconstruct_ref_fullpersp(normalized_2d, coords3d_rel, validity_mask):
     weights = validity_mask.astype(np.float32) + np.float32(1e-4)
     weights = einops.repeat(weights, 'b j -> b (j c) 1', c=2)
 
-    ref = np.linalg.lstsq((A * weights)[0], (b * weights)[0], rcond=None)[0].T  # , l2_regularizer=1e-2, fast=True)
-    ref = np.concatenate([ref[:, :2], ref[:, 2:] / scale2d], axis=1) * scale_rel_backproj
+    i = 2  # TODO we just select one element!
+    ref = np.linalg.lstsq((A * weights)[i], (b * weights)[i], rcond=None)[0].T
+    ref = np.concatenate([ref[:, :2], ref[:, 2:] / scale2d[i]], axis=1) * scale_rel_backproj[i]
     return ref
     # return np.squeeze(ref, axis=-1)
 
@@ -177,7 +187,7 @@ def reconstruct_absolute(coords2d, coords3d_rel, intrinsics, is_predicted_to_be_
     # coords2d_normalized = np.matmul(
     #     to_homogeneous(coords2d), inv_intrinsics, transpose_b=True)[..., :2]
     reconstruct_ref_fn = (
-        None if weak_perspective else reconstruct_ref_fullpersp)
+        reconstruct_ref_weakpersp if weak_perspective else reconstruct_ref_fullpersp)
     # is_predicted_to_be_in_fov = is_within_fov(coords2d)
 
     ref = reconstruct_ref_fn(coords2d_normalized, coords3d_rel, is_predicted_to_be_in_fov)

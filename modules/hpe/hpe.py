@@ -149,7 +149,7 @@ class HumanPoseEstimator:
             return None, None, None
 
         # Move the skeleton into estimated absolute position if necessary  # TODO fIX
-        # pred3d = reconstruct_absolute(pred2d, pred3d, new_K, is_predicted_to_be_in_fov, weak_perspective=False)
+        pred3d = reconstruct_absolute(pred2d, pred3d, new_K, is_predicted_to_be_in_fov, weak_perspective=False)
 
         # Go back in original space (without augmentation and homography)
         pred3d = pred3d @ homo_inv
@@ -201,11 +201,13 @@ if __name__ == "__main__":
 
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
 
-    # cap = RealSense(width=args.cam_width, height=args.cam_height)
-    cap = cv2.VideoCapture('assets/dance.mp4')
+    cap = RealSense(width=args.cam_width, height=args.cam_height)
+    # cap = cv2.VideoCapture(2)
 
-    for _ in tqdm(range(10000)):
+    # for _ in tqdm(range(10000)):
+    while True:
         ret, img = cap.read()
-        img = img[:, 240:-240, :]
+        # img = img[:, 240:-240, :]
         img = cv2.resize(img, (640, 480))
         pose3d, ed, _ = h.estimate(img)
+        print(pose3d[0])

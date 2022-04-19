@@ -22,27 +22,28 @@ class VISPYVisualizer:
         self.input_string.text = self.input_text
 
     @staticmethod
-    def create_visualizer(qi, qo):
-        _ = VISPYVisualizer(qi, qo)
+    def create_visualizer(qi, qo, is_running):
+        _ = VISPYVisualizer(qi, qo, is_running)
         app.run()
 
-    def __init__(self, input_queue, output_queue):
+    def __init__(self, input_queue, output_queue, is_running):
 
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.show = True
+        self.is_running = is_running
 
         self._timer = app.Timer('auto', connect=self.on_timer, start=True)
         self.input_text = '>'
 
-        canvas = scene.SceneCanvas(keys='interactive')
-        canvas.size = 1200, 600
-        canvas.show()
-        canvas.events.key_press.connect(self.printer)
+        self.canvas = scene.SceneCanvas(keys='interactive')
+        self.canvas.size = 1200, 600
+        self.canvas.show()
+        self.canvas.events.key_press.connect(self.printer)
 
         # This is the top-level widget that will hold three ViewBoxes, which will
         # be automatically resized whenever the grid is resized.
-        grid = canvas.central_widget.add_grid()
+        grid = self.canvas.central_widget.add_grid()
 
         # Plot
         b1 = grid.add_view(row=0, col=0)
@@ -108,6 +109,9 @@ class VISPYVisualizer:
         b4.add(self.log)
 
     def on_timer(self, _):
+        if not self.is_running:
+            self.canvas.close()
+            exit()
         if not self.show:
             return
         # Check if there is something to show
@@ -133,7 +137,6 @@ class VISPYVisualizer:
                            [0, math.cos(theta), -math.sin(theta)],
                            [0, math.sin(theta), math.cos(theta)]])
             pose = pose @ R
-            # pose[:, 1] += min(pose[:, 1])
             for i, edge in enumerate(edges):
                 self.lines[i].set_data((pose[[edge[0], edge[1]]]))
 

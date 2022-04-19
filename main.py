@@ -20,6 +20,7 @@ class ISBFSAR:
         self.hpe = hpe
         self.ar = ar
         self.focus = focus
+        self.is_running = True
 
         # Connect to webcam
         if args.cam == "webcam":
@@ -45,7 +46,7 @@ class ISBFSAR:
 
         # Create input
         self.input_queue = multiprocessing.Queue()
-        self.input_thread = Thread(target=just_text, args=(self.input_queue,))
+        self.input_thread = Thread(target=just_text, args=(self.input_queue, lambda: self.is_running))
         self.input_thread.start()
 
         # Create output
@@ -53,7 +54,7 @@ class ISBFSAR:
         if self.debug:
             self.output_queue = multiprocessing.Queue()
             self.output_thread = Thread(target=VISPYVisualizer.create_visualizer,
-                                        args=(self.output_queue, self.input_queue))
+                                        args=(self.output_queue, self.input_queue, lambda: self.is_running))
             self.output_thread.start()
 
     def get_frame(self, img=None):
@@ -68,11 +69,11 @@ class ISBFSAR:
         # Estimate 3d skeleton
         pose3d_abs, edges, bbox = self.hpe.estimate(img)
 
-        # TODO Compute Distance
+        # Compute distance
         d = None
         if pose3d_abs is not None:
             cam_pos = np.array([0, 0, 0])
-            man_pose = np.array(pose3d_abs)
+            man_pose = np.array(pose3d_abs[0])
             d = np.sqrt(np.sum(np.square(cam_pos - man_pose)))
 
         # Normalize
@@ -111,7 +112,7 @@ class ISBFSAR:
                             "fps": fps,
                             "focus": focus,
                             "actions": results,
-                            "distance": d
+                            "distance": d*2  # TODO fix
                             }
                 self.output_queue.put((elements,))
 
@@ -152,6 +153,7 @@ class ISBFSAR:
                 self.log("Not a valid command!")
 
         # clean  # TODO TERMINATE THREADS
+        self.is_running = False
         self.input_thread.join()
         self.output_thread.join()
 
