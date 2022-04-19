@@ -80,6 +80,7 @@ class GazeEstimatorConfig:
 
 class FocusConfig:
     def __init__(self):
+        # GAZE ESTIMATION
         self.face_detector = FaceDetectorConfig()
         self.gaze_estimator = GazeEstimatorConfig()
         self.model = FocusModelConfig()
@@ -90,3 +91,7 @@ class FocusConfig:
         self.dist_thr = 0.3  # when distant, roll under this thr is considered focus
         self.foc_rot_thr = 0.7  # when close, roll above this thr is considered not focus
         self.patience = 16  # result is based on the majority of previous observations
+
+        # MUTUAL GAZE
+        self.head_model = 'modules/focus/mutual_gaze/head_detection/epoch_0.pth'
+        self.focus_model = 'modules/focus/mutual_gaze/focus_detection/checkpoints/MNET3/sess_1_acc_0.80.pth'

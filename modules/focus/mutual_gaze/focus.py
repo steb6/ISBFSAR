@@ -10,33 +10,28 @@ from tqdm import tqdm
 
 WINDOW_SIZE = 3
 
-if __name__ == "__main__":
-    head_model = get_model()
-    head_model.load_state_dict(torch.load('modules/focus/mutual_gaze/head_detection/epoch_0.pth'))
-    head_model.cuda()
-    head_model.eval()
 
-    focus_model = Model()
-    focus_model.load_state_dict(torch.load('modules/focus/mutual_gaze/focus_detection/checkpoints/MNET3/sess_1_acc_0.80.pth'))
-    focus_model.cuda()
-    focus_model.eval()
+class FocusDetector:
+    def __init__(self, args):
+        self.head_model = get_model()
+        self.head_model.load_state_dict(torch.load(args.head_model))
+        self.head_model.cuda()
+        self.head_model.eval()
 
-    # cam = cv2.VideoCapture('assets/test_gaze_with_mask.mp4')
-    cam = cv2.VideoCapture('video.mp4')
-    # cam = RealSense(1920, 1080)
+        self.focus_model = Model()
+        self.focus_model.load_state_dict(
+            torch.load(args.focus_model))
+        self.focus_model.cuda()
+        self.focus_model.eval()
 
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
-    focuses = []
-    for _ in tqdm(range(10000)):
-    # while True:
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        self.focuses = []
 
-        ret, img = cam.read()
-
+    def estimate(self, img):
         inp = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         inp = torch.FloatTensor(inp).cuda() / 255.
         inp = inp.permute(2, 0, 1)
-        res = head_model([inp])
+        res = self.head_model([inp])
         boxes = res[0]['boxes'].detach().int().cpu().numpy()
         scores = res[0]['scores'].detach().cpu().numpy()
         good = nms_cpu(boxes, scores, nms_thresh=0.01)
@@ -52,7 +47,6 @@ if __name__ == "__main__":
             box = boxes[0]
             x = img[box[1]:box[3], box[0]:box[2]]
 
-            # TODO PAD
             if x.shape[0] < x.shape[1]:
                 pad = int((x.shape[1] - x.shape[0]) / 2)
                 x = np.pad(x, ((pad, pad), (0, 0), (0, 0)), 'constant', constant_values=0)
@@ -60,7 +54,6 @@ if __name__ == "__main__":
                 pad = int((x.shape[0] - x.shape[1]) / 2)
                 x = np.pad(x, ((0, 0), (pad, pad), (0, 0)), 'constant', constant_values=0)
             x = cv2.resize(x, (256, 256))
-            # TODO END PAD
 
             normalized_image = copy.deepcopy(x)
 
@@ -83,26 +76,36 @@ if __name__ == "__main__":
             x = x.unsqueeze(0)
             x = x.permute(0, 3, 1, 2)
             x = x / 255.
-            x = normalize(x)
+            x = self.normalize(x)
             x = x.cuda()
 
-            out = focus_model(x)
+            out = self.focus_model(x)
             out = out.mean()
-            focuses.append(out.item() > 0.5)
+            self.focuses.append(out.item() > 0.5)
             if WINDOW_SIZE > 1:
-                if len(focuses) > WINDOW_SIZE:
-                    focuses = focuses[-WINDOW_SIZE:]
-                is_focus = sum(focuses) > (len(focuses) / 2)
+                if len(self.focuses) > WINDOW_SIZE:
+                    self.focuses = self.focuses[-WINDOW_SIZE:]
+                is_focus = sum(self.focuses) > (len(self.focuses) / 2)
             else:
                 is_focus = out.item() > 0.5
 
-            color = (0, 0, 255) if is_focus < 0.5 else (0, 255, 0)
-            img = cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), color, 2)
-            cv2.putText(img, "{:.2f}".format(out.item()), (box[0], box[1]),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0),
-                        2,
-                        cv2.LINE_AA)
+            return out.item(), box
 
-            cv2.imshow("normalized", normalized_image)
-            cv2.imshow("bbox", img)
-            cv2.waitKey(1)
+    def print_bbox(self, img, box):
+        img = cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
+        return img
+
+
+if __name__ == "__main__":
+
+    cam = cv2.VideoCapture(0)
+    focus_detector = FocusDetector()
+
+    for _ in tqdm(range(10000)):
+        ret, img = cam.read()
+
+        score, bbox = focus_detector.estimate(img)
+
+        img = focus_detector.print_bbox(img, bbox)
+        cv2.imshow("bbox", img)
+        cv2.waitKey(1)
