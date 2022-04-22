@@ -1,8 +1,8 @@
 import cv2
 import numpy as np
 import torch
-from modules.focus.mutual_gaze.focus_detection.openpose_utilities import read_openpose_from_json, get_features
-from modules.focus.mutual_gaze.focus_detection.utilities import get_eye_bbox_openpose
+from modules.focus.mutual_gaze.focus_detection.utils.openpose_utilities import read_openpose_from_json, get_features
+from modules.focus.mutual_gaze.focus_detection.utils.utilities import get_eye_bbox_openpose
 from modules.focus.mutual_gaze.head_detection.utils.misc import get_model
 from tqdm import tqdm
 import shutil
@@ -12,7 +12,7 @@ import json
 
 if __name__ == "__main__":
     base_path = 'D:/datasets/mutualGaze_dataset/realsense'
-    out_path = 'D:/datasets/focus_dataset'
+    out_path = 'D:/datasets/focus_dataset_eyes'
 
     normal = base_path + '/eyecontact_annotations.txt'
     moving = base_path + '/eyecontact_annotations_moving_head.txt'
@@ -43,7 +43,7 @@ if __name__ == "__main__":
             joint_pose, joint_confs, keypoints, confidences = openpose
             assert len(keypoints) == 1
             features = get_features(joint_pose, joint_confs, keypoints, confidences)
-            eye_bbox = get_eye_bbox_openpose(joint_pose[0], joint_confs[0])
+            eye_bbox = get_eye_bbox_openpose(joint_pose[0], joint_confs[0], offset_size=0.1)
 
             # TODO DEBUG
             # keypoints = keypoints[0]

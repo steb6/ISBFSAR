@@ -5,12 +5,18 @@ import json
 
 
 class MARIAData(data.Dataset):
-    def __init__(self, path, mode="train", augmentation_size=0.2):
+    def __init__(self, path, mode="train", augmentation_size=0.2, valid_size=0.2, split_number=0):
         self.mode = mode
         if mode == "train":
-            sessions = np.load('assets/setsFile_participants.npz')['pxx_train'][0]
+            sessions = np.load('assets/setsFile_participants.npz')['pxx_train'][split_number]
+            sessions = sessions[int(len(sessions) * valid_size):]
+        elif mode == "test":
+            sessions = np.load('assets/setsFile_participants.npz')['pxx_test'][split_number]
+        elif mode == "valid":
+            sessions = np.load('assets/setsFile_participants.npz')['pxx_train'][split_number]
+            sessions = sessions[:int(len(sessions) * valid_size)]
         else:
-            sessions = np.load('assets/setsFile_participants.npz')['pxx_test'][0]
+            raise Exception("")
         self.images = []
         self.labels = []
         self.features = []
@@ -39,16 +45,16 @@ class MARIAData(data.Dataset):
         random.shuffle(aux)
         # Augmentation
         # TODO MARIA
-        if self.mode == "train":
-            self.augment = [False for _ in range(len(aux))]
-            aux = aux + aux[:int(len(aux) * augmentation_size)]
-            self.augment = self.augment + [True for _ in range(len(aux) - len(self.augment))]
-            self.aug_values = [[random.uniform(-0.2, 0.2),
-                                random.uniform(-0.2, 0.2),
-                                random.uniform(0.5, 2),
-                                random.uniform(0.9, 1),
-                                random.random() < 0.5,
-                                int(random.uniform(-30, 30))] for _ in range(len(self.augment))]
+        # if self.mode == "train":
+        #     self.augment = [False for _ in range(len(aux))]
+        #     aux = aux + aux[:int(len(aux) * augmentation_size)]
+        #     self.augment = self.augment + [True for _ in range(len(aux) - len(self.augment))]
+        #     self.aug_values = [[random.uniform(-0.2, 0.2),
+        #                         random.uniform(-0.2, 0.2),
+        #                         random.uniform(0.5, 2),
+        #                         random.uniform(0.9, 1),
+        #                         random.random() < 0.5,
+        #                         int(random.uniform(-30, 30))] for _ in range(len(self.augment))]
         # TODO END
         self.images, self.labels, self.features = zip(*aux)
         # Count classes
@@ -91,16 +97,17 @@ class MARIAData(data.Dataset):
 if __name__ == "__main__":
     import torch
 
-    data = MARIAData("D:/datasets/focus_dataset")
+    data = MARIAData("D:/datasets/focus_dataset_eyes", mode="train")
 
     for elem in data:
-        print(elem[1])
-        cv2.imshow("", elem[0])
+        (i, keypoints), label = elem
+        print(label)
+        cv2.imshow("", i)
         cv2.waitKey(0)
 
-    loader = torch.utils.data.DataLoader(data, batch_size=1, num_workers=2, shuffle=True)
+    l = torch.utils.data.DataLoader(data, batch_size=1, num_workers=2, shuffle=True)
 
-    for elem in loader:
+    for elem in l:
         print(elem[1])
         cv2.imshow("", elem[0][0].detach().numpy())
         cv2.waitKey(0)

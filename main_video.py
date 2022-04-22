@@ -7,7 +7,7 @@ import time
 from modules.ar.trx import ActionRecognizer
 import cv2
 from playsound import playsound
-from utils.input import RealSense, just_text
+from utils.input import just_text
 from modules.hpe.hpe import HumanPoseEstimator
 from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig, FocusConfig
 from utils.params import TRXConfig
@@ -17,26 +17,14 @@ from threading import Thread
 
 
 class ISBFSAR:
-    def __init__(self, hpe, ar, focus, args, debug=True):
+    def __init__(self, hpe, ar, focus, args, debug=False):
         self.hpe = hpe
         self.ar = ar
         self.focus = focus
         self.is_running = True
 
         # Connect to webcam
-        if args.cam == "webcam":
-            self.cap = cv2.VideoCapture(0)
-            self.cap.set(3, args.cam_width)
-            self.cap.set(4, args.cam_height)
-        elif args.cam == "realsense":
-            self.cap = RealSense(width=args.cam_width, height=args.cam_height)
-            intrinsics = self.cap.intrinsics()
-            i = np.eye(3)
-            i[0][0] = intrinsics.fx
-            i[0][2] = intrinsics.ppx
-            i[1][1] = intrinsics.fy
-            i[1][2] = intrinsics.ppy
-            self.hpe.intrinsics = i
+        self.cap = cv2.VideoCapture('assets/test_gaze_no_mask.mp4')
 
         self.cam_width = args.cam_width
         self.cam_height = args.cam_height
@@ -259,6 +247,6 @@ if __name__ == "__main__":
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
     n = ActionRecognizer(TRXConfig())
 
-    master = ISBFSAR(h, n, f, MainConfig(), debug=True)
+    master = ISBFSAR(h, n, f, MainConfig(), debug=False)
 
     master.run()

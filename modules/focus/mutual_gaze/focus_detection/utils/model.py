@@ -3,9 +3,9 @@ import torchvision.models as models
 
 
 class MutualGazeDetectorHeads(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, model, pretrained):
         super(MutualGazeDetectorHeads, self).__init__()
-        self.backbone = ResNetModel()
+        self.backbone = BackBone(model, pretrained)
         self.classifier = BinaryClassifier(1000)
 
     def forward(self, x):
@@ -14,9 +14,9 @@ class MutualGazeDetectorHeads(torch.nn.Module):
 
 
 class MutualGazeDetectorOPE(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, model, pretrained):
         super(MutualGazeDetectorOPE, self).__init__()
-        self.backbone = ResNetModel()
+        self.backbone = BackBone(model, pretrained)
         self.classifier = BinaryClassifier(1000 + 57)
 
     def forward(self, x, f):
@@ -48,11 +48,13 @@ class BinaryClassifier(torch.nn.Module):
         return self.out(y)
 
 
-class ResNetModel(torch.nn.Module):
-    def __init__(self):
-        super(ResNetModel, self).__init__()
-        # self.model = models.resnet18(pretrained=True)
-        self.model = models.mobilenet_v3_small(pretrained=True)
+class BackBone(torch.nn.Module):
+    def __init__(self, model, pretrained=True):
+        super(BackBone, self).__init__()
+        if model == "rnet":
+            self.model = models.resnet18(pretrained=pretrained)
+        elif model == "mnet":
+            self.model = models.mobilenet_v3_small(pretrained=pretrained)
         # self.model = models.vgg19(pretrained=True)
         # self.model = models.inception_v3(pretrained=True)
 

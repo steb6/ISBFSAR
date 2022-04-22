@@ -6,7 +6,7 @@ n_joints = 30
 
 class MainConfig(object):
     def __init__(self):
-        self.cam = "realsense"
+        self.cam = "webcam"
         self.cam_width = 640
         self.cam_height = 480
         self.window_size = seq_len
@@ -92,6 +92,18 @@ class FocusConfig:
         self.foc_rot_thr = 0.7  # when close, roll above this thr is considered not focus
         self.patience = 16  # result is based on the majority of previous observations
 
-        # MUTUAL GAZE
+
+class MutualGazeConfig:
+    def __init__(self):
         self.head_model = 'modules/focus/mutual_gaze/head_detection/epoch_0.pth'
         self.focus_model = 'modules/focus/mutual_gaze/focus_detection/checkpoints/MNET3/sess_1_acc_0.80.pth'
+
+        self.augmentation_size = 0.2
+        self.dataset = "focus_dataset_heads"
+        self.model = "rnet"  # mnet
+
+        self.batch_size = 8
+        self.lr = 1e-7
+        self.log_every = 10
+        self.pretrained = True
+        self.n_epochs = 1000
