@@ -6,6 +6,14 @@ import numpy as np
 import yaml
 
 
+class FakeFocusDetector:
+    def __init__(self, _):
+        pass
+
+    def estimate(self, _):
+        return None
+
+
 class FocusDetector:
     def __init__(self, config):
         self.gaze_estimator = GazeEstimator(config)
