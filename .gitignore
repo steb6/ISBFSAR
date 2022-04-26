@@ -15,6 +15,7 @@ modules/hpe/modules/onnxs/*
 modules/hpe/modules/raws/*
 modules/hpe/modules/signatured/*
 modules/hpe/assets/*
+modules/hpe/modules
 
 # ar
 modules/ar/data/*
@@ -31,3 +32,4 @@ modules/focus/gaze_estimation/deepheadpose
 modules/focus/gaze_estimation/modules
 modules/focus/mutual_gaze/focus_detection/0.98.pth
 modules/focus/mutual_gaze/head_detection/epoch_0.pth
+modules/focus/gaze_estimation/pytorch_mpiigaze_demo

@@ -12,7 +12,7 @@ except ImportError as e:
 if not os.path.exists('modules/hpe/modules/raws/yolov4.pth'):
     print("Download the weights from https://drive.google.com/file/d/1wv_LiFeCRYwtpkqREPeI13-gPELBDwuJ/view")
     print("Or yolov4.pth from the repository page https://github.com/Tianxiaomo/pytorch-YOLOv4")
-    print("And move it inside modules/hpe/modules/raw")
+    print("And move it inside modules/hpe/modules/raws")
     exit(-1)
 
 

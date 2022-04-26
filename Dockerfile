@@ -10,12 +10,8 @@ RUN apt-get update
 RUN DEBIAN_FRONTEND=noninteractive apt-get install ffmpeg libsm6 libxext6 -y
 RUN pip install opencv-python
 
-# Install ptgaze
-#RUN apt-get install build-essential -y
-#RUN pip install ptgaze
+# Install all the rest
+RUN pip install einops tqdm playsound pyrealsense2 vispy omegaconf scipy mediapipe timm
 
-
-#ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/cuda-11.6/compat/lib.real/"
-#USER human:human
-#WORKDIR /home/human
+# Move files
 COPY . .

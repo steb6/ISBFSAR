@@ -1,17 +1,10 @@
 import cv2
-from ptgaze.gaze_estimator import GazeEstimator
+# from ptgaze.gaze_estimator import GazeEstimator
+from modules.focus.gaze_estimation.pytorch_mpiigaze_demo.ptgaze.gaze_estimator import GazeEstimator
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation
-import numpy as np
 import yaml
-
-
-class FakeFocusDetector:
-    def __init__(self, _):
-        pass
-
-    def estimate(self, _):
-        return None
+import numpy as np
 
 
 class FocusDetector:
@@ -27,8 +20,7 @@ class FocusDetector:
         self.is_close = None
         self.is_focus = None
 
-        with open('C:/Users/sberti/AppData/Local/mambaforge/envs/robotologyenv/Lib/'
-                  'site-packages/ptgaze/data/calib/sample_params.yaml') as f:
+        with open(config.sample_params_path) as f:
             self.data = yaml.safe_load(f)
         self.camera_matrix = np.array(self.data['camera_matrix']['data']).reshape(3, 3)
         self.focuses = []
