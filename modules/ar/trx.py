@@ -2,6 +2,7 @@ import pickle
 import numpy as np
 from utils.params import TRXConfig
 from utils.tensorrt_runner import Runner
+from tqdm import tqdm
 
 
 class ActionRecognizer:
@@ -91,6 +92,6 @@ class ActionRecognizer:
 if __name__ == "__main__":
     ar = ActionRecognizer(TRXConfig())
     for _ in range(5):
-        ar.train((np.random.random((16, 30, 3)), "test"))
-    for _ in range(1000):
+        ar.train((np.random.random((16, 30, 3)), "test", True))
+    for _ in tqdm(range(1000)):
         ar.inference(np.random.random((30, 3)))

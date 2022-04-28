@@ -152,7 +152,7 @@ if __name__ == "__main__":
     import yaml
     from utils.params import FocusConfig
 
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture('assets/test_gaze_no_mask.mp4')
     det = FocusDetector(FocusConfig())
 
     for _ in tqdm(range(10000000)):
@@ -179,7 +179,7 @@ if __name__ == "__main__":
                 img = det.print_head_pose(img, f)
 
         # cv2.imshow('normalized', f.normalized_image)
-        cv2.imshow('frame', img)
-        cv2.waitKey(1)
+        # cv2.imshow('frame', img)
+        # cv2.waitKey(1)
 
     cap.release()

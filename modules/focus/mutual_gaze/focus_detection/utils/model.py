@@ -3,7 +3,7 @@ import torchvision.models as models
 
 
 class MutualGazeDetectorHeads(torch.nn.Module):
-    def __init__(self, model, pretrained):
+    def __init__(self, model, pretrained=False):
         super(MutualGazeDetectorHeads, self).__init__()
         self.backbone = BackBone(model, pretrained)
         self.classifier = BinaryClassifier(1000)

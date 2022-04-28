@@ -24,7 +24,7 @@ if __name__ == "__main__":
     p = [
         Profile().add("input", min=(1, 3, 256, 256), opt=(1, 3, 256, 256), max=(1, 3, 256, 256))
     ]
-    i = {"input": np.ones(shape=(1, 3, 256, 256), dtype=int)}
+    i = {"input": np.ones(shape=(1, 3, 256, 256), dtype=np.float32)}
     create_engine(p,
                   'modules/hpe/modules/onnxs/yolo.onnx',
                   'modules/hpe/modules/engines/yolo.engine',
@@ -35,7 +35,7 @@ if __name__ == "__main__":
         Profile().add("frame", min=(480, 640, 3), opt=(480, 640, 3), max=(480, 640, 3)),
         Profile().add("H", min=(5, 3, 3), opt=(5, 3, 3), max=(5, 3, 3))
     ]
-    i = {"frame": np.ones(shape=(480, 640, 3), dtype=int),
+    i = {"frame": np.ones(shape=(480, 640, 3), dtype=np.int32),
          "H": np.ones(shape=(5, 3, 3), dtype=np.float32)}
     create_engine(p,
                   'modules/hpe/modules/onnxs/image_transformation.onnx',

@@ -1,4 +1,13 @@
 import os
+try:
+    from tensorrt import __version__ as trt_version
+except ModuleNotFoundError:
+    trt_version = "8.2.3"
+
+if "8.2.2" in trt_version:
+    trt_version = "822"
+elif "8.2.3" in trt_version:
+    trt_version = "823"
 
 seq_len = 16
 n_joints = 30
@@ -6,7 +15,7 @@ n_joints = 30
 
 class MainConfig(object):
     def __init__(self):
-        self.cam = "webcam"
+        self.cam = "realsense"  # webcam or realsense
         self.cam_width = 640
         self.cam_height = 480
         self.window_size = seq_len
@@ -15,9 +24,9 @@ class MainConfig(object):
 
 class MetrabsTRTConfig(object):
     def __init__(self):
-        self.yolo_engine_path = 'modules/hpe/modules/engines/yolo.engine'
-        self.image_transformation_path = 'modules/hpe/modules/engines/image_transformation.engine'
-        self.bbone_engine_path = 'modules/hpe/modules/engines/bbone.engine'
+        self.yolo_engine_path = 'modules/hpe/modules/engines_{}/yolo.engine'.format(trt_version)
+        self.image_transformation_path = 'modules/hpe/modules/engines_{}/image_transformation.engine'.format(trt_version)
+        self.bbone_engine_path = 'modules/hpe/modules/engines_{}/bbone.engine'.format(trt_version)
         self.head_weight_path = 'modules/hpe/modules/numpy/head_weights.npy'
         self.head_bias_path = 'modules/hpe/modules/numpy/head_bias.npy'
         self.expand_joints_path = 'assets/32_to_122.npy'
@@ -44,7 +53,7 @@ class TRXConfig(object):
         self.n_workers = 2 if 'Users' in os.getcwd() else 12
         self.n_epochs = 10000
         self.log_every = 10 if 'Users' in os.getcwd() else 1000
-        self.trt_path = 'modules/ar/modules/engines/FULL.engine'
+        self.trt_path = 'modules/ar/modules/engines_{}/FULL.engine'.format(trt_version)
         self.trans_linear_in_dim = 256
         self.trans_linear_out_dim = 128
         self.way = 5
@@ -100,12 +109,13 @@ class MutualGazeConfig:
         self.head_model = 'modules/focus/mutual_gaze/head_detection/epoch_0.pth'
         self.focus_model = 'modules/focus/mutual_gaze/focus_detection/checkpoints/MNET3/sess_1_acc_0.80.pth'
 
-        self.augmentation_size = 0.2
+        self.augmentation_size = 0.4
         self.dataset = "focus_dataset_heads"
-        self.model = "rnet"  # mnet
+        self.model = "rnet"
 
         self.batch_size = 8
         self.lr = 1e-7
         self.log_every = 10
         self.pretrained = True
         self.n_epochs = 1000
+        self.patience = 15

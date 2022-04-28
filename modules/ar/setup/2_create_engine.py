@@ -20,7 +20,7 @@ def create_engine(in_path, out_path, inputs):
 if __name__ == "__main__":
     i = {"support": np.ones(shape=(80, 90), dtype=np.float32),
          "query": np.ones(shape=(16, 90), dtype=np.float32),
-         "labels": np.ones(shape=(5), dtype=int)}
+         "labels": np.ones(shape=(5), dtype=np.int32)}
     create_engine('modules/ar/modules/onnxs/FULL.onnx',
                   'modules/ar/modules/engines/FULL.engine',
                   i)

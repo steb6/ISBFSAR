@@ -14,4 +14,5 @@ RUN pip install opencv-python
 RUN pip install einops tqdm playsound pyrealsense2 vispy omegaconf scipy mediapipe timm
 
 # Move files
+ENV PYTHONPATH=$PWD
 COPY . .

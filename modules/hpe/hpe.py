@@ -6,6 +6,7 @@ import einops
 import numpy as np
 from utils.input import RealSense
 from utils.tensorrt_runner import Runner
+import time
 
 
 class HumanPoseEstimator:
@@ -50,6 +51,7 @@ class HumanPoseEstimator:
         self.heads_bias = np.load(model_config.head_bias_path)
 
     def estimate(self, frame):
+
         # Preprocess for yolo
         square_img = cv2.resize(frame, (256, 256), fx=1.0, fy=1.0, interpolation=cv2.INTER_AREA)
         yolo_in = copy.deepcopy(square_img)
@@ -201,13 +203,16 @@ if __name__ == "__main__":
 
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
 
-    cap = RealSense(width=args.cam_width, height=args.cam_height)
-    # cap = cv2.VideoCapture(2)
+    # cap = RealSense(width=args.cam_width, height=args.cam_height)
+    cap = cv2.VideoCapture('assets/dance.mp4')
 
-    # for _ in tqdm(range(10000)):
-    while True:
+    for _ in tqdm(range(10000)):
+    # while True:
         ret, img = cap.read()
         # img = img[:, 240:-240, :]
         img = cv2.resize(img, (640, 480))
         pose3d, ed, _ = h.estimate(img)
-        print(pose3d[0])
+        #print(pose3d[0])
+
+# YOLO: 0.009266376495361328, IMG: 0.01273202896118164, BBONE:0.016077518463134766
+# YOLO: 0.01244974136352539, IMG: 0.010402917861938477, BBONE:0.038718223571777344

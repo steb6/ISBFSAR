@@ -7,6 +7,7 @@ from modules.focus.mutual_gaze.focus_detection.utils.model import MutualGazeDete
 import cv2
 import numpy as np
 from tqdm import tqdm
+from utils.params import MutualGazeConfig
 
 WINDOW_SIZE = 3
 
@@ -18,7 +19,7 @@ class FocusDetector:
         self.head_model.cuda()
         self.head_model.eval()
 
-        self.focus_model = Model()
+        self.focus_model = Model(args.model)
         self.focus_model.load_state_dict(
             torch.load(args.focus_model))
         self.focus_model.cuda()
@@ -99,7 +100,7 @@ class FocusDetector:
 if __name__ == "__main__":
 
     cam = cv2.VideoCapture(0)
-    focus_detector = FocusDetector()
+    focus_detector = FocusDetector(MutualGazeConfig())
 
     for _ in tqdm(range(10000)):
         ret, img = cam.read()

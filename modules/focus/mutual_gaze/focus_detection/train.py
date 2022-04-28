@@ -86,7 +86,10 @@ if __name__ == "__main__":
             print("Valid set watching: {}, not watching: {}".format(valid_data.n_watch, valid_data.n_not_watch))
 
             best_model = None
-            best_acc = 0
+            best_f1 = 0
+            last_valid_loss = 10000
+            best_valid_loss = 10000
+            patience = config.patience
 
             for epoch in range(config.n_epochs):
                 # TRAIN
@@ -150,13 +153,24 @@ if __name__ == "__main__":
                            "valid/f1": sum(valid_f1s) / len(valid_f1s),
                            "lr": optimizer.param_groups[0]['lr']})
 
-                score = sum(valid_accuracies) / len(valid_accuracies)
-                if score > best_acc:
-                    best_acc = score
+                # Check if this is the best model
+                score = sum(valid_f1s) / len(valid_f1s)
+                if score > best_f1:
+                    best_f1 = score
                     best_model = model.state_dict()
 
+                # Check patience
+                valid_loss = sum(valid_losses) / len(valid_losses)
+                if valid_loss > best_valid_loss:
+                    patience -= 1
+                    if patience == 0:
+                        break  # Exit the training loop
+                else:
+                    best_valid_loss = valid_loss
+                    patience = config.patience
+
             # TEST
-            # torch.save(best_model, "sess_{}_acc_{:.2f}.pth".format(sess, sum(valid_accuracies) / len(valid_accuracies)))
+            torch.save(best_model, "group_{}_sess_{}_f1_{:.2f}.pth".format(group, sess, sum(valid_f1s) / len(valid_f1s)))
             test_losses = []
             test_accuracies = []
             test_precisions = []
