@@ -20,21 +20,21 @@ if __name__ == "__main__":
     groups.append("RNET MARIA SMALL")
     # 1 RNET MARIA BIG
     groups.append("RNET MARIA BIG")
-    configs[1].dataset = "focus_dataset_BIG_heads"
+    configs[1].dataset = "focus_dataset_big_easy"
     # 2 RNET MY SMALL
     groups.append("RNET MY SMALL")
     configs[2].augmentation_size = -1
     # 3 RNET MY BIG
     groups.append("RNET MY BIG")
     configs[3].augmentation_size = -1
-    configs[3].dataset = "focus_dataset_BIG_heads"
+    configs[3].dataset = "focus_dataset_big_easy"
     # 4 MNET MARIA SMALL
     groups.append("MNET MARIA SMALL")
     configs[4].model = "mnet"
     # 5 MNET MARIA BIG
     groups.append("MNET MARIA BIG")
     configs[5].model = "mnet"
-    configs[5].dataset = "focus_dataset_BIG_heads"
+    configs[5].dataset = "focus_dataset_big_easy"
     # 6 MNET MY SMALL
     groups.append("MNET MY SMALL")
     configs[6].model = "mnet"
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     groups.append("MNET MY BIG")
     configs[7].model = "mnet"
     configs[7].augmentation_size = -1
-    configs[7].dataset = "focus_dataset_BIG_heads"
+    configs[7].dataset = "focus_dataset_big_easy"
 
     for config, group in zip(configs, groups):
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
         all_f1s = []
 
         for sess in range(5):
-            train_data = MARIAData(dataset, mode="train", split_number=sess)
+            train_data = MARIAData(dataset, mode="train", split_number=sess, augmentation_size=config.augmentation_size)
             train_loader = torch.utils.data.DataLoader(train_data, batch_size=config.batch_size,
                                                        num_workers=2 if is_local else 12, shuffle=True)
             valid_data = MARIAData(dataset, mode="valid", split_number=sess)

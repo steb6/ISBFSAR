@@ -55,6 +55,8 @@ class BackBone(torch.nn.Module):
             self.model = models.resnet18(pretrained=pretrained)
         elif model == "mnet":
             self.model = models.mobilenet_v3_small(pretrained=pretrained)
+        for params in self.model.parameters():  # Freeze weights
+            params.requires_grad = False
         # self.model = models.vgg19(pretrained=True)
         # self.model = models.inception_v3(pretrained=True)
 

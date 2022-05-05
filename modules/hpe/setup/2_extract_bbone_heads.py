@@ -21,14 +21,14 @@ if not os.path.exists('modules/hpe/modules/raws/metrabs_eff2l_y4'):
     print("Extract them and put them into modules/hpe/modules/raws")
     exit(-1)
 
-BATCH_SIZE = 5
+BATCH_SIZE = 1
 
 # Input names
 model_name = 'efficientnetv2-l'
 model_folder = 'modules/hpe/modules/raws/metrabs_eff2l_y4'
 
 # Output names
-bbone_name = "modules/hpe/modules/signatured/bbone"
+bbone_name = "modules/hpe/modules/signatured/bbone1"
 head_name = "modules/hpe/modules/numpy/head"
 
 # Load model

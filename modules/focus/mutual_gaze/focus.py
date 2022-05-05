@@ -99,7 +99,7 @@ class FocusDetector:
 
 if __name__ == "__main__":
 
-    cam = cv2.VideoCapture(0)
+    cam = cv2.VideoCapture('assets/test_gaze_no_mask.mp4')
     focus_detector = FocusDetector(MutualGazeConfig())
 
     for _ in tqdm(range(10000)):
@@ -107,6 +107,6 @@ if __name__ == "__main__":
 
         score, bbox = focus_detector.estimate(img)
 
-        img = focus_detector.print_bbox(img, bbox)
-        cv2.imshow("bbox", img)
-        cv2.waitKey(1)
+        # img = focus_detector.print_bbox(img, bbox)
+        # cv2.imshow("bbox", img)
+        # cv2.waitKey(1)

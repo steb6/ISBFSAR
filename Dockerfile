@@ -1,6 +1,6 @@
 # Base human Pipeline Image
 # It starts from a TensorRT container and install python, opencv, pytorch
-FROM nvcr.io/nvidia/tensorrt:22.03-py3
+FROM nvcr.io/nvidia/tensorrt:22.01-py3
 
 # Install pytorch
 RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
@@ -15,4 +15,4 @@ RUN pip install einops tqdm playsound pyrealsense2 vispy omegaconf scipy mediapi
 
 # Move files
 ENV PYTHONPATH=$PWD
-COPY . .
+#COPY . .

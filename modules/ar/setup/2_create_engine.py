@@ -22,5 +22,5 @@ if __name__ == "__main__":
          "query": np.ones(shape=(16, 90), dtype=np.float32),
          "labels": np.ones(shape=(5), dtype=np.int32)}
     create_engine('modules/ar/modules/onnxs/FULL.onnx',
-                  'modules/ar/modules/engines/FULL.engine',
+                  'modules/ar/modules/engines/trx.engine',
                   i)

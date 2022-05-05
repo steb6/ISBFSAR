@@ -15,6 +15,7 @@ class HumanPoseEstimator:
         self.yolo_thresh = model_config.yolo_thresh
         self.nms_thresh = model_config.nms_thresh
         self.num_aug = model_config.num_aug
+        self.n_test = 1 if self.num_aug < 1 else self.num_aug
 
         # Intrinsics and K matrix of RealSense
         self.K = np.zeros((3, 3), np.float32)
@@ -47,8 +48,7 @@ class HumanPoseEstimator:
         self.yolo = Runner(model_config.yolo_engine_path)
         self.image_transformation = Runner(model_config.image_transformation_path)
         self.bbone = Runner(model_config.bbone_engine_path)
-        self.head_weights = np.load(model_config.head_weight_path)
-        self.heads_bias = np.load(model_config.head_bias_path)
+        self.heads = Runner(model_config.heads_engine_path)
 
     def estimate(self, frame):
 
@@ -85,26 +85,32 @@ class HumanPoseEstimator:
         new_K, homo_inv = homography(x1, x2, y1, y2, self.K, 256)
 
         # Test time augmentation TODO ADD GAMMA DECODING
-        aug_should_flip, aug_rotflipmat, aug_gammas, aug_scales = get_augmentations(self.num_aug)
-        new_K = np.tile(new_K, (self.num_aug, 1, 1))
-        for k in range(self.num_aug):
-            new_K[k, :2, :2] *= aug_scales[k]
-        homo_inv = aug_rotflipmat @ np.tile(homo_inv[0], (self.num_aug, 1, 1))
+        if self.num_aug > 0:
+            aug_should_flip, aug_rotflipmat, aug_gammas, aug_scales = get_augmentations(self.num_aug)
+            new_K = np.tile(new_K, (self.num_aug, 1, 1))
+            for k in range(self.num_aug):
+                new_K[k, :2, :2] *= aug_scales[k]
+            homo_inv = aug_rotflipmat @ np.tile(homo_inv[0], (self.num_aug, 1, 1))
 
         # Apply homography
         H = self.K @ np.linalg.inv(new_K @ homo_inv)
         bbone_in = self.image_transformation([frame.astype(int), H.astype(np.float32)])
-        bbone_in = bbone_in[0].reshape(5, 256, 256, 3)
+
+        bbone_in = bbone_in[0].reshape(self.n_test, 256, 256, 3)  # TODO PARAMETRIZE
         bbone_in_ = (bbone_in / 255.0).astype(np.float32)
 
         # BackBone
         outputs = self.bbone(bbone_in_)
-        features = outputs[0].reshape(5, 8, 8, 1280)
+        # features = outputs[0].reshape(self.n_test, 8, 8, 1280)
 
         # Heads
-        logits = (features @ self.head_weights[0][0]) + self.heads_bias  # 5, 8, 8, 288
+        logits = self.heads(outputs)
+        # TODO HERE COMES THE PAIN!
+        # logits = (features @ self.head_weights[0][0]) + self.heads_bias  # 5, 8, 8, 288
+        # logits = np.random.random((1, 8, 8, 288))
 
         # Get logits 3d  TODO DO THE SAME WITH 2D
+        logits = logits[0].reshape(1, 8, 8, 288)
         _, logits2d, logits3d = np.split(logits, [0, 32], axis=3)
         current_format = 'b h w (d j)'
         logits3d = einops.rearrange(logits3d, f'{current_format} -> b h w d j', j=32)  # 5, 8, 8, 9, 32
@@ -151,7 +157,7 @@ class HumanPoseEstimator:
             return None, None, None
 
         # Move the skeleton into estimated absolute position if necessary  # TODO fIX
-        pred3d = reconstruct_absolute(pred2d, pred3d, new_K, is_predicted_to_be_in_fov, weak_perspective=False)
+        # pred3d = reconstruct_absolute(pred2d, pred3d, new_K, is_predicted_to_be_in_fov, weak_perspective=False)
 
         # Go back in original space (without augmentation and homography)
         pred3d = pred3d @ homo_inv
@@ -173,13 +179,13 @@ class HumanPoseEstimator:
             edges = None
 
         # Mirror predictions
-        for k in range(len(self.joint_mirror_map)):
-            aux = pred3d[aug_should_flip, self.joint_mirror_map[k, 0]]
-            pred3d[aug_should_flip, self.joint_mirror_map[k, 0]] = pred3d[aug_should_flip, self.joint_mirror_map[k, 1]]
-            pred3d[aug_should_flip, self.joint_mirror_map[k, 1]] = aux
+        # for k in range(len(self.joint_mirror_map)):
+        #     aux = pred3d[aug_should_flip, self.joint_mirror_map[k, 0]]
+        #     pred3d[aug_should_flip, self.joint_mirror_map[k, 0]] = pred3d[aug_should_flip, self.joint_mirror_map[k, 1]]
+        #     pred3d[aug_should_flip, self.joint_mirror_map[k, 1]] = aux
 
         # Average test time augmentation results
-        pred3d = pred3d.mean(axis=0)
+        # pred3d = pred3d.mean(axis=0)
 
         # is_pose_consistent_with_box(pred2d, human)
         # # TODO EXPERIMENT DEBUG
@@ -191,6 +197,8 @@ class HumanPoseEstimator:
         # cv2.waitKey(1)
         # # TODO END EXPERIMENT
 
+        pred3d = pred3d[0]  # Remove batch dimension
+
         return pred3d, edges, (x1, x2, y1, y2)
 
 
@@ -198,21 +206,23 @@ if __name__ == "__main__":
     from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig
     from tqdm import tqdm
     import cv2
+    from utils.matplotlib_visualizer import MPLPosePrinter
 
     args = MainConfig()
+    # vis = MPLPosePrinter()
 
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
 
-    # cap = RealSense(width=args.cam_width, height=args.cam_height)
-    cap = cv2.VideoCapture('assets/dance.mp4')
+    cap = RealSense(width=args.cam_width, height=args.cam_height)
+    # cap = cv2.VideoCapture(-1)
 
     for _ in tqdm(range(10000)):
     # while True:
         ret, img = cap.read()
         # img = img[:, 240:-240, :]
-        img = cv2.resize(img, (640, 480))
-        pose3d, ed, _ = h.estimate(img)
-        #print(pose3d[0])
-
-# YOLO: 0.009266376495361328, IMG: 0.01273202896118164, BBONE:0.016077518463134766
-# YOLO: 0.01244974136352539, IMG: 0.010402917861938477, BBONE:0.038718223571777344
+        # img = cv2.resize(img, (640, 480))
+        p, e, b = h.estimate(img)
+        p = p - p[0]
+        # vis.clear()
+        # vis.print_pose(p, e)
+        # vis.sleep(0.001)

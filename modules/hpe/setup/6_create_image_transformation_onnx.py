@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 
-BATCH_SIZE = 5  # NOTE" the input has always batch size = 1, this is the batch size of the transformation matrix
+BATCH_SIZE = 1  # NOTE" the input has always batch size = 1, this is the batch size of the transformation matrix
 
 
 class ImageTransformer(torch.nn.Module):

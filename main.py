@@ -4,7 +4,7 @@ import os
 import numpy as np
 from tqdm import tqdm
 import time
-from modules.ar.trx import ActionRecognizer
+from modules.ar.ar import ActionRecognizer
 import cv2
 from playsound import playsound
 from utils.input import RealSense, just_text
@@ -17,26 +17,29 @@ from threading import Thread
 
 
 class ISBFSAR:
-    def __init__(self, hpe, ar, focus, args, debug=True):
+    def __init__(self, hpe, ar, focus, args, visualizer=True, video_input=None):
         self.hpe = hpe
         self.ar = ar
         self.focus = focus
         self.is_running = True
 
         # Connect to webcam
-        if args.cam == "webcam":
-            self.cap = cv2.VideoCapture(0)
-            self.cap.set(3, args.cam_width)
-            self.cap.set(4, args.cam_height)
-        elif args.cam == "realsense":
-            self.cap = RealSense(width=args.cam_width, height=args.cam_height)
-            intrinsics = self.cap.intrinsics()
-            i = np.eye(3)
-            i[0][0] = intrinsics.fx
-            i[0][2] = intrinsics.ppx
-            i[1][1] = intrinsics.fy
-            i[1][2] = intrinsics.ppy
-            self.hpe.intrinsics = i
+        if video_input is None:
+            if args.cam == "webcam":
+                self.cap = cv2.VideoCapture(0)
+                self.cap.set(3, args.cam_width)
+                self.cap.set(4, args.cam_height)
+            elif args.cam == "realsense":
+                self.cap = RealSense(width=args.cam_width, height=args.cam_height)
+                intrinsics = self.cap.intrinsics()
+                i = np.eye(3)
+                i[0][0] = intrinsics.fx
+                i[0][2] = intrinsics.ppx
+                i[1][1] = intrinsics.fy
+                i[1][2] = intrinsics.ppy
+                self.hpe.intrinsics = i
+        else:
+            self.cap = cv2.VideoCapture(video_input)
 
         self.cam_width = args.cam_width
         self.cam_height = args.cam_height
@@ -51,8 +54,8 @@ class ISBFSAR:
         self.input_thread.start()
 
         # Create output
-        self.debug = debug
-        if self.debug:
+        self.visualizer = visualizer
+        if self.visualizer:
             self.output_queue = multiprocessing.Queue()
             self.output_thread = Thread(target=VISPYVisualizer.create_visualizer,
                                         args=(self.output_queue, self.input_queue, lambda: self.is_running))
@@ -98,7 +101,7 @@ class ISBFSAR:
         fps_s = self.fps_s[-10:]
         fps = sum(fps_s) / len(fps_s)
 
-        if self.debug:
+        if self.visualizer:
             if pose3d_abs is not None:
                 # Print bbox
                 x1, x2, y1, y2 = bbox
@@ -259,6 +262,6 @@ if __name__ == "__main__":
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
     n = ActionRecognizer(TRXConfig())
 
-    master = ISBFSAR(h, n, f, MainConfig(), debug=True)
+    master = ISBFSAR(h, n, f, MainConfig(), visualizer=True)
 
     master.run()

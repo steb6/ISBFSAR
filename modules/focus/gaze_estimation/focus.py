@@ -137,7 +137,7 @@ class FocusDetector:
 
             # Print focus
             self.focuses.append(focus)
-            self.focuses = self.focuses[-3:]
+            self.focuses = self.focuses[-self.patience:]
             self.is_focus = self.focuses.count(True) > len(self.focuses) / 2
 
         return focus, fc
@@ -160,23 +160,23 @@ if __name__ == "__main__":
         ok, img = cap.read()
         f = det.estimate(img)
 
-        if f is not None:
-            _, f = f
+        # if f is not None:
+        #     _, f = f
 
             # TODO START INVERSE OF HOMOGRAPHY
             # f.head_pose_rot.head_pose = f.head_pose_rot.as_rotvec() @ f.normalizing_rot
             # TODO END INVERSE OF HOMOGRAPHY
 
-            img = det.print_close_or_not(img)
-            img = det.print_bbox_area(img, f)
-            img = det.print_if_is_focus(img)
-            img = det.print_score(img, f)
-            img = det.print_bbox(img, f)
-
-            if det.is_close:
-                img = det.print_gaze_pose(img, f)
-            else:
-                img = det.print_head_pose(img, f)
+            # img = det.print_close_or_not(img)
+            # img = det.print_bbox_area(img, f)
+            # img = det.print_if_is_focus(img)
+            # img = det.print_score(img, f)
+            # img = det.print_bbox(img, f)
+            #
+            # if det.is_close:
+            #     img = det.print_gaze_pose(img, f)
+            # else:
+            #     img = det.print_head_pose(img, f)
 
         # cv2.imshow('normalized', f.normalized_image)
         # cv2.imshow('frame', img)

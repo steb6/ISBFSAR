@@ -9,12 +9,16 @@ import os
 
 
 if __name__ == "__main__":
+    big = True
+    hard = False
+
     base_path = 'D:/datasets/mutualGaze_dataset/realsense'
-    out_path = 'D:/datasets/focus_dataset_BIG_heads'
+    out_path = 'D:/datasets/focus_dataset_big_easy'
 
     normal = base_path + '/eyecontact_annotations.txt'
     moving = base_path + '/eyecontact_annotations_moving_head.txt'
     rotating = base_path + '/eyecontact_annotations_rotate_head_body.txt'
+    elems = [normal, moving, rotating] if hard else [normal, rotating]
 
     model = get_model()
     model.load_state_dict(torch.load('modules/focus/mutual_gaze/head_detection/epoch_0.pth'))
@@ -25,7 +29,7 @@ if __name__ == "__main__":
         shutil.rmtree(out_path)
     os.mkdir(out_path)
 
-    for elem in [normal, moving, rotating]:
+    for elem in elems:
         with open(elem, "r") as in_file:
             lines = in_file.readlines()
 
@@ -50,13 +54,10 @@ if __name__ == "__main__":
                 scores = scores[good]
                 if len(boxes) > 0:
                     for box in boxes:
-                        # TODO START BIG HEADS
                         x_min, y_min, x_max, y_max = box
-                        delta_y = int((y_max - y_min) / 4)
-                        y_max = min(480, y_max + delta_y)
-                        # cv2.imshow("",  inp)  # TODO DEBUG
-                        # cv2.waitKey(0)  # TODO DEBUG
-                        # TODO END
+                        if big:
+                            delta_y = int((y_max - y_min) / 4)
+                            y_max = min(480, y_max + delta_y)
                         inp = img[y_min:y_max, x_min:x_max]
                         if inp.shape[0] < inp.shape[1]:
                             pad = int((inp.shape[1] - inp.shape[0]) / 2)
@@ -78,3 +79,4 @@ if __name__ == "__main__":
                         offset = len(os.listdir(out_dir))
 
                         cv2.imwrite(out_dir + '/{}.jpg'.format(offset), x)
+    print("DONE! check p14 and p18 for outliers!")

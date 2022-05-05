@@ -1,13 +1,7 @@
-import os
-try:
-    from tensorrt import __version__ as trt_version
-except ModuleNotFoundError:
-    trt_version = "8.2.3"
+import platform
 
-if "8.2.2" in trt_version:
-    trt_version = "822"
-elif "8.2.3" in trt_version:
-    trt_version = "823"
+ubuntu = platform.system() == "Linux"
+engine_dir = "engines/{}".format("docker" if ubuntu else "conda")
 
 seq_len = 16
 n_joints = 30
@@ -15,7 +9,7 @@ n_joints = 30
 
 class MainConfig(object):
     def __init__(self):
-        self.cam = "realsense"  # webcam or realsense
+        self.cam = "webcam"  # webcam or realsense
         self.cam_width = 640
         self.cam_height = 480
         self.window_size = seq_len
@@ -24,17 +18,16 @@ class MainConfig(object):
 
 class MetrabsTRTConfig(object):
     def __init__(self):
-        self.yolo_engine_path = 'modules/hpe/modules/engines_{}/yolo.engine'.format(trt_version)
-        self.image_transformation_path = 'modules/hpe/modules/engines_{}/image_transformation.engine'.format(trt_version)
-        self.bbone_engine_path = 'modules/hpe/modules/engines_{}/bbone.engine'.format(trt_version)
-        self.head_weight_path = 'modules/hpe/modules/numpy/head_weights.npy'
-        self.head_bias_path = 'modules/hpe/modules/numpy/head_bias.npy'
+        self.yolo_engine_path = 'modules/hpe/modules/{}/yolo.engine'.format(engine_dir)
+        self.image_transformation_path = 'modules/hpe/modules/{}/image_transformation1.engine'.format(engine_dir)
+        self.bbone_engine_path = 'modules/hpe/modules/{}/bbone1.engine'.format(engine_dir)
+        self.heads_engine_path = 'modules/hpe/modules/{}/heads1.engine'.format(engine_dir)
         self.expand_joints_path = 'assets/32_to_122.npy'
         self.skeleton_types_path = 'assets/skeleton_types.pkl'
         self.skeleton = 'smpl+head_30'
         self.yolo_thresh = 0.3
         self.nms_thresh = 0.7
-        self.num_aug = 5
+        self.num_aug = 0  # if zero, disables test time augmentation
 
 
 class RealSenseIntrinsics(object):
@@ -49,11 +42,11 @@ class RealSenseIntrinsics(object):
 
 class TRXConfig(object):
     def __init__(self):
-        self.data_path = "D:/datasets/nturgbd_metrabs_2/" if 'Users' in os.getcwd() else "../nturgbd_metrabs_2/"
-        self.n_workers = 2 if 'Users' in os.getcwd() else 12
+        self.data_path = "D:/datasets/nturgbd_metrabs_2/" if ubuntu else "../nturgbd_metrabs_2/"
+        self.n_workers = 2 if ubuntu else 12
         self.n_epochs = 10000
-        self.log_every = 10 if 'Users' in os.getcwd() else 1000
-        self.trt_path = 'modules/ar/modules/engines_{}/FULL.engine'.format(trt_version)
+        self.log_every = 10 if ubuntu else 1000
+        self.trt_path = 'modules/ar/modules/{}/trx.engine'.format(engine_dir)
         self.trans_linear_in_dim = 256
         self.trans_linear_out_dim = 128
         self.way = 5
@@ -100,7 +93,7 @@ class FocusConfig:
         self.close_thr = -0.95  # When close, z value over this thr is considered focus
         self.dist_thr = 0.3  # when distant, roll under this thr is considered focus
         self.foc_rot_thr = 0.7  # when close, roll above this thr is considered not focus
-        self.patience = 16  # result is based on the majority of previous observations
+        self.patience = 3  # result is based on the majority of previous observations
         self.sample_params_path = "assets/sample_params.yaml"
 
 
@@ -110,7 +103,7 @@ class MutualGazeConfig:
         self.focus_model = 'modules/focus/mutual_gaze/focus_detection/checkpoints/MNET3/sess_1_acc_0.80.pth'
 
         self.augmentation_size = 0.4
-        self.dataset = "focus_dataset_heads"
+        self.dataset = "focus_dataset_small_easy"
         self.model = "rnet"
 
         self.batch_size = 8
@@ -118,4 +111,4 @@ class MutualGazeConfig:
         self.log_every = 10
         self.pretrained = True
         self.n_epochs = 1000
-        self.patience = 15
+        self.patience = 100

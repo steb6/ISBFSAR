@@ -5,7 +5,7 @@ import random
 
 
 class MARIAData(data.Dataset):
-    def __init__(self, path, mode="train", augmentation_size=0.2, valid_size=0.2, split_number=0):
+    def __init__(self, path, mode="train", augmentation_size=0.4, valid_size=0.2, split_number=0, hard_mode=True):
         # Augmentation_size < 0 means always augment
         self.mode = mode
         if mode == "train":
@@ -33,17 +33,16 @@ class MARIAData(data.Dataset):
         # Augmentation
         # TODO MARIA
         self.augmentation_size = augmentation_size
-        if augmentation_size > 0:
-            if self.mode == "train":
-                self.augment = [False for _ in range(len(aux))]
-                aux = aux + aux[:int(len(aux) * augmentation_size)]
-                self.augment = self.augment + [True for _ in range(len(aux) - len(self.augment))]
-                self.aug_values = [[random.uniform(-0.2, 0.2),
-                                    random.uniform(-0.2, 0.2),
-                                    random.uniform(0.5, 2),
-                                    random.uniform(0.9, 1),
-                                    random.random() < 0.5,
-                                    int(random.uniform(-30, 30))] for _ in range(len(self.augment))]
+        if self.mode == "train" and augmentation_size > 0:
+            self.augment = [False for _ in range(len(aux))]
+            aux = aux + aux[:int(len(aux) * augmentation_size)]
+            self.augment = self.augment + [True for _ in range(len(aux) - len(self.augment))]
+            self.aug_values = [[random.uniform(-0.2, 0.2),
+                                random.uniform(-0.2, 0.2),
+                                random.uniform(0.5, 2),
+                                random.uniform(0.9, 1),
+                                random.random() < 0.5,
+                                int(random.uniform(-30, 30))] for _ in range(len(self.augment))]
         # TODO END
         self.images, self.labels = zip(*aux)
         # Count classes
