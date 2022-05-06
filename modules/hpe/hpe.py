@@ -213,8 +213,9 @@ if __name__ == "__main__":
 
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
 
-    cap = RealSense(width=args.cam_width, height=args.cam_height)
+    # cap = RealSense(width=args.cam_width, height=args.cam_height)
     # cap = cv2.VideoCapture(-1)
+    cap = cv2.VideoCapture('assets/test_gaze_no_mask.mp4')
 
     for _ in tqdm(range(10000)):
     # while True:

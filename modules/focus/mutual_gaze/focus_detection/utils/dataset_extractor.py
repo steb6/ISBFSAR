@@ -9,11 +9,11 @@ import os
 
 
 if __name__ == "__main__":
-    big = True
+    big = False
     hard = False
 
     base_path = 'D:/datasets/mutualGaze_dataset/realsense'
-    out_path = 'D:/datasets/focus_dataset_big_easy'
+    out_path = 'D:/datasets/focus_dataset_small_easy'
 
     normal = base_path + '/eyecontact_annotations.txt'
     moving = base_path + '/eyecontact_annotations_moving_head.txt'

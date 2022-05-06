@@ -19,6 +19,7 @@ class ActionRecognizer:
         self.n_joints = args.n_joints
 
         self.requires_focus = [False for _ in range(args.way)]
+        self.requires_box = [None for _ in range(args.way)]
 
     def inference(self, pose):
         if pose is None:
@@ -53,9 +54,9 @@ class ActionRecognizer:
         predicted = predicted[:len(self.support_labels)]
         for k in range(len(predicted)):
             if k < len(self.support_labels):
-                results[self.support_labels[k]] = (predicted[k], self.requires_focus[k])
+                results[self.support_labels[k]] = (predicted[k], self.requires_focus[k], self.requires_box[k])
             else:
-                results['Action_{}'.format(k)] = (predicted[k], self.requires_focus[k])
+                results['Action_{}'.format(k)] = (predicted[k], self.requires_focus[k], self.requires_box[k])
         return results
 
     def remove(self, flag):
@@ -87,11 +88,12 @@ class ActionRecognizer:
             y = np.array([int(self.support_labels.index(raw[1]))])
             self.support_set[y.item()] = x
             self.requires_focus[y.item()] = raw[2]
+            self.requires_box[y.item()] = raw[3]
 
 
 if __name__ == "__main__":
     ar = ActionRecognizer(TRXConfig())
     for _ in range(5):
         ar.train((np.random.random((16, 30, 3)), "test", True))
-    for _ in tqdm(range(1000)):
+    for _ in tqdm(range(100000)):
         ar.inference(np.random.random((30, 3)))

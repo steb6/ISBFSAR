@@ -153,11 +153,10 @@ if __name__ == "__main__":
     from utils.params import FocusConfig
 
     cap = cv2.VideoCapture('assets/test_gaze_no_mask.mp4')
+    ok, img = cap.read()
     det = FocusDetector(FocusConfig())
 
     for _ in tqdm(range(10000000)):
-
-        ok, img = cap.read()
         f = det.estimate(img)
 
         # if f is not None:

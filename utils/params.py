@@ -9,7 +9,7 @@ n_joints = 30
 
 class MainConfig(object):
     def __init__(self):
-        self.cam = "webcam"  # webcam or realsense
+        self.cam = "realsense"  # webcam or realsense
         self.cam_width = 640
         self.cam_height = 480
         self.window_size = seq_len
@@ -106,8 +106,8 @@ class MutualGazeConfig:
         self.dataset = "focus_dataset_small_easy"
         self.model = "rnet"
 
-        self.batch_size = 8
-        self.lr = 1e-7
+        self.batch_size = 32
+        self.lr = 1e-4
         self.log_every = 10
         self.pretrained = True
         self.n_epochs = 1000

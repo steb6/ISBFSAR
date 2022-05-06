@@ -1,3 +1,4 @@
+import pickle as pkl
 from modules.focus.gaze_estimation.focus import FocusDetector
 # from modules.focus.mutual_gaze.focus import FocusDetector
 import os
@@ -12,16 +13,32 @@ from modules.hpe.hpe import HumanPoseEstimator
 from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig, FocusConfig
 from utils.params import TRXConfig
 from utils.output import VISPYVisualizer
-import multiprocessing
+from multiprocessing import Process, Queue
 from threading import Thread
 
 
 class ISBFSAR:
-    def __init__(self, hpe, ar, focus, args, visualizer=True, video_input=None):
-        self.hpe = hpe
-        self.ar = ar
-        self.focus = focus
-        self.is_running = True
+    def __init__(self, args, visualizer=True, video_input=None):
+        # Load modules
+        self.focus_in = Queue(1)
+        self.focus_out = Queue(1)
+        self.focus_proc = Process(target=run_module, args=(FocusDetector,
+                                                           (FocusConfig(),),
+                                                           self.focus_in, self.focus_out))
+        self.focus_proc.start()
+
+        self.hpe_in = Queue(1)
+        self.hpe_out = Queue(1)
+        self.hpe_proc = Process(target=run_module, args=(HumanPoseEstimator,
+                                                         (MetrabsTRTConfig(), RealSenseIntrinsics()),
+                                                         self.hpe_in, self.hpe_out))
+        self.hpe_proc.start()
+
+        # self.ar_in = Queue(1)
+        # self.ar_out = Queue(1)
+        # self.ar_proc = Process(target=run_module, args=(ActionRecognizer, TRXConfig(),
+        #                                                 self.ar_in, self.ar_out))
+        self.ar = ActionRecognizer(TRXConfig())
 
         # Connect to webcam
         if video_input is None:
@@ -31,13 +48,13 @@ class ISBFSAR:
                 self.cap.set(4, args.cam_height)
             elif args.cam == "realsense":
                 self.cap = RealSense(width=args.cam_width, height=args.cam_height)
-                intrinsics = self.cap.intrinsics()
-                i = np.eye(3)
-                i[0][0] = intrinsics.fx
-                i[0][2] = intrinsics.ppx
-                i[1][1] = intrinsics.fy
-                i[1][2] = intrinsics.ppy
-                self.hpe.intrinsics = i
+                # intrinsics = self.cap.intrinsics()
+                # i = np.eye(3)
+                # i[0][0] = intrinsics.fx
+                # i[0][2] = intrinsics.ppx
+                # i[1][1] = intrinsics.fy
+                # i[1][2] = intrinsics.ppy
+                # self.hpe.intrinsics = i
         else:
             self.cap = cv2.VideoCapture(video_input)
 
@@ -49,17 +66,18 @@ class ISBFSAR:
         self.skeleton_scale = args.skeleton_scale
 
         # Create input
-        self.input_queue = multiprocessing.Queue()
-        self.input_thread = Thread(target=just_text, args=(self.input_queue, lambda: self.is_running))
-        self.input_thread.start()
+        # TODO IF I USE PROCESS IT WORKS BUT EXCEPT, WITH THREADS IT DOESNT WORK
+        self.input_queue = Queue(1)
+        self.input_proc = Process(target=just_text, args=(self.input_queue,))
+        self.input_proc.start()
 
         # Create output
         self.visualizer = visualizer
         if self.visualizer:
-            self.output_queue = multiprocessing.Queue()
-            self.output_thread = Thread(target=VISPYVisualizer.create_visualizer,
-                                        args=(self.output_queue, self.input_queue, lambda: self.is_running))
-            self.output_thread.start()
+            self.output_queue = Queue(1)
+            self.output_proc = Process(target=VISPYVisualizer.create_visualizer,
+                                       args=(self.output_queue, self.input_queue))
+            self.output_proc.start()
 
     def get_frame(self, img=None):
         start = time.time()
@@ -70,8 +88,18 @@ class ISBFSAR:
             if not ret:
                 raise Exception("Cannot grab frame!")
 
-        # Estimate 3d skeleton
-        pose3d_abs, edges, bbox = self.hpe.estimate(img)
+        # Start independent modules
+        focus = False
+
+        self.hpe_in.put(img)
+        self.focus_in.put(img)
+
+        pose3d_abs, edges, bbox = self.hpe_out.get()
+        focus_ret = self.focus_out.get()
+
+        if focus_ret is not None:
+            focus, face = focus_ret
+            # img = self.focus.print_bbox(img, face)  # TODO PRINT FACE AGAIN
 
         # Compute distance
         d = None
@@ -86,13 +114,6 @@ class ISBFSAR:
 
         # Make inference
         results = self.ar.inference(pose3d_root)
-
-        # Focus
-        focus = False
-        ret = self.focus.estimate(img)
-        if ret is not None:
-            focus, face = ret
-            img = self.focus.print_bbox(img, face)
 
         end = time.time()
 
@@ -116,7 +137,8 @@ class ISBFSAR:
                             "fps": fps,
                             "focus": focus,
                             "actions": results,
-                            "distance": d * 2  # TODO fix
+                            "distance": d * 2,  # TODO fix
+                            "box": None
                             }
                 self.output_queue.put((elements,))
 
@@ -127,8 +149,8 @@ class ISBFSAR:
         print(msg)
 
     def run(self):
-        # while True:
-        for _ in tqdm(list(range(10000))):
+        while True:
+        # for _ in tqdm(list(range(10000))):
             # We received a command
             if not self.input_queue.empty():
                 msg = self.input_queue.get()
@@ -153,13 +175,18 @@ class ISBFSAR:
             elif msg[0] == "test":
                 self.test_video(msg[1])
 
+            elif msg[0] == "save":
+                self.save()
+
+            elif msg[0] == "load":
+                self.load()
+
             else:
                 self.log("Not a valid command!")
 
         # clean  # TODO TERMINATE THREADS
-        self.is_running = False
-        self.input_thread.join()
-        self.output_thread.join()
+        self.input_proc.join()
+        self.output_proc.join()
 
     def test_video(self, path):
         if not os.path.exists(path):
@@ -195,6 +222,11 @@ class ISBFSAR:
     def learn_command(self, flag):
         # If a string is provided
         requires_focus = "-focus" in flag
+        requires_box = None
+        if "-box" in flag:
+            requires_box = True
+        if "-nobox" in flag:
+            requires_box = False
         if '.' not in flag[0]:
             flag = flag[0]
 
@@ -253,15 +285,40 @@ class ISBFSAR:
             data = data[list(range(0, len(data), int(len(data) / self.window_size)))]
 
         self.log("Success!")
-        data = (data, flag, requires_focus)
+        data = (data, flag, requires_focus, requires_box)
         self.ar.train(data)
+
+    def save(self):
+        with open('support_set.pkl', 'wb') as outfile:
+            pkl.dump(self.ar.support_set, outfile)
+        with open('support_labels.pkl', 'wb') as outfile:
+            pkl.dump(self.ar.support_labels, outfile)
+        with open('requires_focus.pkl', 'wb') as outfile:
+            pkl.dump(self.ar.requires_focus, outfile)
+        with open('requires_box.pkl', 'wb') as outfile:
+            pkl.dump(self.ar.requires_box, outfile)
+
+    def load(self):
+        with open('support_set.pkl', 'rb') as pkl_file:
+            self.ar.support_set = pkl.load(pkl_file)
+        with open('support_labels.pkl', 'rb') as pkl_file:
+            self.ar.support_labels = pkl.load(pkl_file)
+        with open('requires_focus.pkl', 'rb') as pkl_file:
+            self.ar.requires_focus = pkl.load(pkl_file)
+        with open('requires_box.pkl', 'rb') as pkl_file:
+            self.ar.requires_box = pkl.load(pkl_file)
+
+
+def run_module(module, configurations, input_queue, output_queue):
+    x = module(*configurations)
+    while True:
+        inp = input_queue.get()
+        y = x.estimate(inp)
+        output_queue.put(y)
 
 
 if __name__ == "__main__":
-    f = FocusDetector(FocusConfig())
-    h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
-    n = ActionRecognizer(TRXConfig())
-
-    master = ISBFSAR(h, n, f, MainConfig(), visualizer=True)
+    master = ISBFSAR(MainConfig(), visualizer=True)
+    # master = ISBFSAR(h, n, f, MainConfig(), visualizer=True, video_input="assets/test_gaze_no_mask.mp4")
 
     master.run()

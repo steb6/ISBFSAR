@@ -2,8 +2,8 @@ import numpy as np
 import pyrealsense2 as rs
 
 
-def just_text(queue, is_running):
-    while is_running():
+def just_text(queue):
+    while True:
         msg = input("Enter command here: ")
         queue.put(msg)
         if msg == 'close' or msg == 'exit' or msg == 'quit' or msg == 'q':
