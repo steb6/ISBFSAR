@@ -4,6 +4,8 @@ import torch
 
 BATCH_SIZE = 1  # NOTE" the input has always batch size = 1, this is the batch size of the transformation matrix
 
+# python C:\Users\sberti\AppData\Local\mambaforge\envs\robotologyenv\Scripts\polygraphy run modules/hpe/modules/onnxs/image_transformation1.onnx --trt --onnxrt --trt-outputs mark all --onnx-outputs mark all --fail-fast
+
 
 class ImageTransformer(torch.nn.Module):
     def __init__(self, n_batch, h, w):
@@ -61,6 +63,6 @@ if __name__ == '__main__':
 
     model = ImageTransformer(BATCH_SIZE, 480, 640)
     model.cuda()
-    torch.onnx.export(model, (inp_, H_), 'modules/hpe/modules/onnxs/image_transformation.onnx',
+    torch.onnx.export(model, (inp_, H_), 'modules/hpe/modules/onnxs/image_transformation1.onnx',
                       input_names=['frame', 'H'], output_names=['images'],
                       opset_version=11)

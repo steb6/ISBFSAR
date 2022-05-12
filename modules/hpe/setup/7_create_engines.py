@@ -19,13 +19,13 @@ def create_engine(in_path, out_path, inputs):
 
 
 if __name__ == "__main__":
-    # YOLO
-    i = {"input": np.ones(shape=(1, 3, 256, 256), dtype=np.float32)}
-    create_engine(  # p,
-        'modules/hpe/modules/onnxs/yolo.onnx',
-        'modules/hpe/modules/engines/yolo.engine',
-        i)
-
+    # # YOLO
+    # i = {"input": np.ones(shape=(1, 3, 256, 256), dtype=np.float32)}
+    # create_engine(  # p,
+    #     'modules/hpe/modules/onnxs/yolo.onnx',
+    #     'modules/hpe/modules/engines/yolo.engine',
+    #     i)
+    #
     # Image Transformation
     i = {"frame": np.ones(shape=(480, 640, 3), dtype=np.int32),
          "H": np.ones(shape=(BATCH_SIZE, 3, 3), dtype=np.float32)}
@@ -34,15 +34,15 @@ if __name__ == "__main__":
         'modules/hpe/modules/engines/image_transformation1.engine',
         i)
 
-    # BackBone
-    i = {"images": np.ones(shape=(BATCH_SIZE, 256, 256, 3), dtype=np.float32)}
-    create_engine(  # p,
-        'modules/hpe/modules/onnxs/bbone1.onnx',
-        'modules/hpe/modules/engines/bbone1.engine',
-        i)
-    # Heads
-    i = {"input": np.ones(shape=(81920,), dtype=np.float32)}
-    create_engine(  # p,
-        'modules/hpe/modules/onnxs/heads1.onnx',
-        'modules/hpe/modules/engines/heads1.engine',
-        i)
+    # # BackBone
+    # i = {"images": np.ones(shape=(BATCH_SIZE, 256, 256, 3), dtype=np.float32)}
+    # create_engine(  # p,
+    #     'modules/hpe/modules/onnxs/bbone1.onnx',
+    #     'modules/hpe/modules/engines/bbone1.engine',
+    #     i)
+    # # Heads
+    # i = {"input": np.ones(shape=(81920,), dtype=np.float32)}
+    # create_engine(  # p,
+    #     'modules/hpe/modules/onnxs/heads1.onnx',
+    #     'modules/hpe/modules/engines/heads1.engine',
+    #     i)

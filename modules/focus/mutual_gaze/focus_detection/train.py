@@ -87,7 +87,8 @@ if __name__ == "__main__":
             normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                              std=[0.229, 0.224, 0.225])
 
-            print("Train set length: {}, valid set length: {}".format(len(train_loader), len(valid_loader)))
+            print("Train set length: {}, valid set length: {}".format(len(train_loader) * config.batch_size,
+                                                                      len(valid_loader) * config.batch_size))
             print("Train set watching: {}, not watching: {}".format(train_data.n_watch, train_data.n_not_watch))
             print("Valid set watching: {}, not watching: {}".format(valid_data.n_watch, valid_data.n_not_watch))
 

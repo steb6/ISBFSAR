@@ -34,10 +34,6 @@ class ISBFSAR:
                                                          self.hpe_in, self.hpe_out))
         self.hpe_proc.start()
 
-        # self.ar_in = Queue(1)
-        # self.ar_out = Queue(1)
-        # self.ar_proc = Process(target=run_module, args=(ActionRecognizer, TRXConfig(),
-        #                                                 self.ar_in, self.ar_out))
         self.ar = ActionRecognizer(TRXConfig())
 
         # Connect to webcam
@@ -68,8 +64,8 @@ class ISBFSAR:
         # Create input
         # TODO IF I USE PROCESS IT WORKS BUT EXCEPT, WITH THREADS IT DOESNT WORK
         self.input_queue = Queue(1)
-        self.input_proc = Process(target=just_text, args=(self.input_queue,))
-        self.input_proc.start()
+        # self.input_proc = Process(target=just_text, args=(self.input_queue,))
+        # self.input_proc.start()
 
         # Create output
         self.visualizer = visualizer
@@ -289,23 +285,23 @@ class ISBFSAR:
         self.ar.train(data)
 
     def save(self):
-        with open('support_set.pkl', 'wb') as outfile:
+        with open('assets/saved/support_set.pkl', 'wb') as outfile:
             pkl.dump(self.ar.support_set, outfile)
-        with open('support_labels.pkl', 'wb') as outfile:
+        with open('assets/saved/support_labels.pkl', 'wb') as outfile:
             pkl.dump(self.ar.support_labels, outfile)
-        with open('requires_focus.pkl', 'wb') as outfile:
+        with open('assets/saved/requires_focus.pkl', 'wb') as outfile:
             pkl.dump(self.ar.requires_focus, outfile)
-        with open('requires_box.pkl', 'wb') as outfile:
+        with open('assets/saved/requires_box.pkl', 'wb') as outfile:
             pkl.dump(self.ar.requires_box, outfile)
 
     def load(self):
-        with open('support_set.pkl', 'rb') as pkl_file:
+        with open('assets/saved/support_set.pkl', 'rb') as pkl_file:
             self.ar.support_set = pkl.load(pkl_file)
-        with open('support_labels.pkl', 'rb') as pkl_file:
+        with open('assets/saved/support_labels.pkl', 'rb') as pkl_file:
             self.ar.support_labels = pkl.load(pkl_file)
-        with open('requires_focus.pkl', 'rb') as pkl_file:
+        with open('assets/saved/requires_focus.pkl', 'rb') as pkl_file:
             self.ar.requires_focus = pkl.load(pkl_file)
-        with open('requires_box.pkl', 'rb') as pkl_file:
+        with open('assets/saved/requires_box.pkl', 'rb') as pkl_file:
             self.ar.requires_box = pkl.load(pkl_file)
 
 

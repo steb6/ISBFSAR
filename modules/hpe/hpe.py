@@ -96,7 +96,9 @@ class HumanPoseEstimator:
         H = self.K @ np.linalg.inv(new_K @ homo_inv)
         bbone_in = self.image_transformation([frame.astype(int), H.astype(np.float32)])
 
-        bbone_in = bbone_in[0].reshape(self.n_test, 256, 256, 3)  # TODO PARAMETRIZE
+        bbone_in = bbone_in[0].reshape(self.n_test, 256, 256, 3)
+        # cv2.imshow("BBONE", bbone_in[0].astype(np.uint8))  # TODO SOLVE THE MISTERY
+        # cv2.waitKey(1)  # TODO SOLVE THE MISTERY
         bbone_in_ = (bbone_in / 255.0).astype(np.float32)
 
         # BackBone
@@ -105,9 +107,6 @@ class HumanPoseEstimator:
 
         # Heads
         logits = self.heads(outputs)
-        # TODO HERE COMES THE PAIN!
-        # logits = (features @ self.head_weights[0][0]) + self.heads_bias  # 5, 8, 8, 288
-        # logits = np.random.random((1, 8, 8, 288))
 
         # Get logits 3d  TODO DO THE SAME WITH 2D
         logits = logits[0].reshape(1, 8, 8, 288)
@@ -213,17 +212,18 @@ if __name__ == "__main__":
 
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
 
-    # cap = RealSense(width=args.cam_width, height=args.cam_height)
-    # cap = cv2.VideoCapture(-1)
-    cap = cv2.VideoCapture('assets/test_gaze_no_mask.mp4')
+    cap = RealSense(width=args.cam_width, height=args.cam_height)
+    # cap = cv2.VideoCapture(2)
+    # cap = cv2.VideoCapture('assets/test_gaze_no_mask.mp4')
 
     for _ in tqdm(range(10000)):
     # while True:
         ret, img = cap.read()
+        cv2.imshow("img", img)
         # img = img[:, 240:-240, :]
         # img = cv2.resize(img, (640, 480))
-        p, e, b = h.estimate(img)
-        p = p - p[0]
+        h.estimate(img)
+        # p = p - p[0]
         # vis.clear()
         # vis.print_pose(p, e)
         # vis.sleep(0.001)

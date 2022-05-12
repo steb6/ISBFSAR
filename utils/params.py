@@ -1,7 +1,7 @@
 import platform
 
 ubuntu = platform.system() == "Linux"
-engine_dir = "engines/{}".format("docker" if ubuntu else "conda")
+engine_dir = "engines"
 
 seq_len = 16
 n_joints = 30
@@ -107,7 +107,7 @@ class MutualGazeConfig:
         self.model = "rnet"
 
         self.batch_size = 32
-        self.lr = 1e-4
+        self.lr = 1e-6
         self.log_every = 10
         self.pretrained = True
         self.n_epochs = 1000

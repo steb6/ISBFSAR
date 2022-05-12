@@ -94,6 +94,6 @@ class ActionRecognizer:
 if __name__ == "__main__":
     ar = ActionRecognizer(TRXConfig())
     for _ in range(5):
-        ar.train((np.random.random((16, 30, 3)), "test", True))
+        ar.train((np.random.random((16, 30, 3)), "test", True, False))
     for _ in tqdm(range(100000)):
         ar.inference(np.random.random((30, 3)))
