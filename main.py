@@ -177,6 +177,9 @@ class ISBFSAR:
             elif msg[0] == "load":
                 self.load()
 
+            elif msg[0] == "sim":
+                self.sim(msg[1], msg[2])
+
             else:
                 self.log("Not a valid command!")
 
@@ -293,6 +296,8 @@ class ISBFSAR:
             pkl.dump(self.ar.requires_focus, outfile)
         with open('assets/saved/requires_box.pkl', 'wb') as outfile:
             pkl.dump(self.ar.requires_box, outfile)
+        with open('assets/saved/sim.pkl', 'wb') as outfile:
+            pkl.dump(self.ar.similar_actions, outfile)
 
     def load(self):
         with open('assets/saved/support_set.pkl', 'rb') as pkl_file:
@@ -303,6 +308,11 @@ class ISBFSAR:
             self.ar.requires_focus = pkl.load(pkl_file)
         with open('assets/saved/requires_box.pkl', 'rb') as pkl_file:
             self.ar.requires_box = pkl.load(pkl_file)
+        with open('assets/saved/sim.pkl', 'rb') as pkl_file:
+            self.ar.similar_actions = pkl.load(pkl_file)
+
+    def sim(self, action1, action2):
+        self.ar.sim(action1, action2)
 
 
 def run_module(module, configurations, input_queue, output_queue):

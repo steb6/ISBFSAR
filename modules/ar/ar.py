@@ -3,6 +3,7 @@ import numpy as np
 from utils.params import TRXConfig
 from utils.tensorrt_runner import Runner
 from tqdm import tqdm
+import copy
 
 
 class ActionRecognizer:
@@ -17,6 +18,7 @@ class ActionRecognizer:
         self.seq_len = args.seq_len
         self.way = args.way
         self.n_joints = args.n_joints
+        self.similar_actions = []
 
         self.requires_focus = [False for _ in range(args.way)]
         self.requires_box = [None for _ in range(args.way)]
@@ -36,28 +38,67 @@ class ActionRecognizer:
         elif len(self.previous_frames) == self.seq_len + 1:
             self.previous_frames = self.previous_frames[1:]  # add as last frame
 
-        # Predict actual action
-        poses = np.stack(self.previous_frames).reshape(self.seq_len, -1).astype(np.float32)
-        labels = np.array(list(range(self.way)))
-        ss = self.support_set.reshape(-1, 90).astype(np.float32)
-        outputs = self.ar([ss, labels, poses])
-        outputs = outputs[0].reshape(1, 5)
+        if len(self.similar_actions) == 0:  # CASE NO SIMILAR ACTION
+            # Predict actual action
+            poses = np.stack(self.previous_frames).reshape(self.seq_len, -1).astype(np.float32)
+            labels = np.array(list(range(self.way)))
+            ss = self.support_set.reshape(-1, 90).astype(np.float32)
+            outputs = self.ar([ss, labels, poses])
+            outputs = outputs[0].reshape(1, 5)
 
-        # Softmax
-        max_along_axis = outputs.max(axis=1, keepdims=True)
-        exponential = np.exp(outputs - max_along_axis)
-        denominator = np.sum(exponential, axis=1, keepdims=True)
-        predicted = exponential / denominator
-        predicted = predicted[0]
+            # Softmax
+            max_along_axis = outputs.max(axis=1, keepdims=True)
+            exponential = np.exp(outputs - max_along_axis)
+            denominator = np.sum(exponential, axis=1, keepdims=True)
+            predicted = exponential / denominator
+            predicted = predicted[0]
 
-        results = {}  # return output as dictionary
-        predicted = predicted[:len(self.support_labels)]
-        for k in range(len(predicted)):
-            if k < len(self.support_labels):
-                results[self.support_labels[k]] = (predicted[k], self.requires_focus[k], self.requires_box[k])
-            else:
-                results['Action_{}'.format(k)] = (predicted[k], self.requires_focus[k], self.requires_box[k])
-        return results
+            results = {}  # return output as dictionary
+            predicted = predicted[:len(self.support_labels)]
+            for k in range(len(predicted)):
+                if k < len(self.support_labels):
+                    results[self.support_labels[k]] = (predicted[k], self.requires_focus[k], self.requires_box[k])
+                else:
+                    results['Action_{}'.format(k)] = (predicted[k], self.requires_focus[k], self.requires_box[k])
+            return results
+        else:
+            to_combine = []
+            for actions in self.similar_actions:  # CASE SIMILAR ACTIONS
+                for action in actions:
+                    # Predict actual action
+                    poses = np.stack(self.previous_frames).reshape(self.seq_len, -1).astype(np.float32)
+                    labels = np.array(list(range(self.way)))
+                    ss = copy.deepcopy(self.support_set)
+                    ss[self.support_labels.index(action)] = np.zeros_like(ss[self.support_labels.index(action)])
+                    ss = ss.reshape(-1, 90).astype(np.float32)
+                    outputs = self.ar([ss, labels, poses])
+                    outputs = outputs[0].reshape(1, 5)
+
+                    # Softmax
+                    max_along_axis = outputs.max(axis=1, keepdims=True)
+                    exponential = np.exp(outputs - max_along_axis)
+                    denominator = np.sum(exponential, axis=1, keepdims=True)
+                    predicted = exponential / denominator
+                    predicted = predicted[0]
+
+                    results = {}  # return output as dictionary
+                    predicted = predicted[:len(self.support_labels)]
+                    for k in range(len(predicted)):
+                        if k < len(self.support_labels):
+                            results[self.support_labels[k]] = (predicted[k], self.requires_focus[k], self.requires_box[k])
+                        else:
+                            results['Action_{}'.format(k)] = (predicted[k], self.requires_focus[k], self.requires_box[k])
+                    to_combine.append(results)
+                # TODO COMBINE RESULTS (DOES NOT WORK)
+                combined = copy.deepcopy(to_combine[0])
+                for key in self.support_labels:
+                    combined[key] = tuple([sum(x[key][0] for x in to_combine) / 2, combined[key][1], combined[key][2]])
+                combined[actions[0]] = tuple([to_combine[1][actions[0]][0], combined[actions[0]][1], combined[actions[0]][2]])
+                combined[actions[1]] = tuple([to_combine[0][actions[1]][0], combined[actions[1]][1], combined[actions[1]][2]])
+            return combined
+
+    def sim(self, action1, action2):
+        self.similar_actions.append((action1, action2))
 
     def remove(self, flag):
         """

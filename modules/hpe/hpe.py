@@ -168,7 +168,7 @@ class HumanPoseEstimator:
         # pred2d_original = np.concatenate((pred2d, np.ones_like(pred2d)[..., :1]), axis=-1) @ homo_inv
         # pred2d_original = pred2d_original[..., :2]
         # # TODO END TRY
-
+        # return # TODO REMOVE
         # Get correct skeleton
         pred3d = (pred3d.swapaxes(1, 2) @ self.expand_joints).swapaxes(1, 2)
         if self.skeleton is not None:
