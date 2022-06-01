@@ -4,6 +4,7 @@ import torch.utils.data as data
 import random
 import numpy as np
 
+
 # https://rose1.ntu.edu.sg/dataset/actionRecognition/
 
 
@@ -29,11 +30,14 @@ class MetrabsData(data.Dataset):
 
         support_set = np.array([self.get_random_video(cl) for cl in support_classes])
         target_set = self.get_random_video(target_class)
+        unknown_set = self.get_random_video(random.sample(list(np.delete(np.array(list(range(len(self.classes)))),
+                                                                         support_classes)), 1)[0])
 
         if self.return_true_class_index:  # To print the name of the action
             return support_set, target_set, np.array(support_classes), target_class
         else:  # To train the model
-            return support_set, target_set, np.array(range(0, self.k)), np.array(support_classes.index(target_class))
+            return support_set, target_set, unknown_set,\
+                   np.array(range(0, self.k)), np.array(support_classes.index(target_class))
 
     def __len__(self):
         return self.n_task

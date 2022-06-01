@@ -1,7 +1,7 @@
 import numpy as np
 from polygraphy.backend.trt import CreateConfig, EngineFromNetwork, NetworkFromOnnxPath, SaveEngine, TrtRunner
 
-BATCH_SIZE = 1
+BATCH_SIZE = 5
 
 
 def create_engine(in_path, out_path, inputs):
@@ -30,19 +30,19 @@ if __name__ == "__main__":
     i = {"frame": np.ones(shape=(480, 640, 3), dtype=np.int32),
          "H": np.ones(shape=(BATCH_SIZE, 3, 3), dtype=np.float32)}
     create_engine(  # p,
-        'modules/hpe/modules/onnxs/image_transformation1.onnx',
-        'modules/hpe/modules/engines/image_transformation1.engine',
+        'modules/hpe/modules/onnxs/image_transformation{}.onnx'.format(BATCH_SIZE),
+        'modules/hpe/modules/engines/image_transformation{}.engine'.format(BATCH_SIZE),
         i)
 
-    # # BackBone
-    # i = {"images": np.ones(shape=(BATCH_SIZE, 256, 256, 3), dtype=np.float32)}
-    # create_engine(  # p,
-    #     'modules/hpe/modules/onnxs/bbone1.onnx',
-    #     'modules/hpe/modules/engines/bbone1.engine',
-    #     i)
-    # # Heads
-    # i = {"input": np.ones(shape=(81920,), dtype=np.float32)}
-    # create_engine(  # p,
-    #     'modules/hpe/modules/onnxs/heads1.onnx',
-    #     'modules/hpe/modules/engines/heads1.engine',
-    #     i)
+    # BackBone
+    i = {"images": np.ones(shape=(BATCH_SIZE, 256, 256, 3), dtype=np.float32)}
+    create_engine(  # p,
+        'modules/hpe/modules/onnxs/bbone{}.onnx'.format(BATCH_SIZE),
+        'modules/hpe/modules/engines/bbone{}.engine'.format(BATCH_SIZE),
+        i)
+    # Heads
+    i = {"input": np.ones(shape=(81920*BATCH_SIZE,), dtype=np.float32)}
+    create_engine(  # p,
+        'modules/hpe/modules/onnxs/heads{}.onnx'.format(BATCH_SIZE),
+        'modules/hpe/modules/engines/heads{}.engine'.format(BATCH_SIZE),
+        i)

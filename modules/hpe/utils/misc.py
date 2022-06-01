@@ -170,7 +170,7 @@ def reconstruct_ref_fullpersp(normalized_2d, coords3d_rel, validity_mask):
     weights = validity_mask.astype(np.float32) + np.float32(1e-4)
     weights = einops.repeat(weights, 'b j -> b (j c) 1', c=2)
 
-    i = 2  # TODO we just select one element!
+    i = 0  # TODO we just select one element!
     ref = np.linalg.lstsq((A * weights)[i], (b * weights)[i], rcond=None)[0].T
     ref = np.concatenate([ref[:, :2], ref[:, 2:] / scale2d[i]], axis=1) * scale_rel_backproj[i]
     return ref

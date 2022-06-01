@@ -2,6 +2,7 @@ import platform
 
 ubuntu = platform.system() == "Linux"
 engine_dir = "engines"
+print("Ubuntu: {}".format(ubuntu))
 
 seq_len = 16
 n_joints = 30
@@ -9,7 +10,7 @@ n_joints = 30
 
 class MainConfig(object):
     def __init__(self):
-        self.cam = "realsense"  # webcam or realsense
+        self.cam = "webcam"  # webcam or realsense
         self.cam_width = 640
         self.cam_height = 480
         self.window_size = seq_len
@@ -42,10 +43,11 @@ class RealSenseIntrinsics(object):
 
 class TRXConfig(object):
     def __init__(self):
-        self.data_path = "D:/datasets/nturgbd_metrabs_2/" if ubuntu else "../nturgbd_metrabs_2/"
-        self.n_workers = 2 if ubuntu else 12
+        self.optimize_every = 16
+        self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"
+        self.n_workers = 2 if not ubuntu else 12
         self.n_epochs = 10000
-        self.log_every = 10 if ubuntu else 1000
+        self.log_every = 10 if not ubuntu else 1000
         self.trt_path = 'modules/ar/modules/{}/trx.engine'.format(engine_dir)
         self.trans_linear_in_dim = 256
         self.trans_linear_out_dim = 128
@@ -100,7 +102,7 @@ class FocusConfig:
 class MutualGazeConfig:
     def __init__(self):
         self.head_model = 'modules/focus/mutual_gaze/head_detection/epoch_0.pth'
-        self.focus_model = 'modules/focus/mutual_gaze/focus_detection/checkpoints/MNET3/sess_1_acc_0.80.pth'
+        self.focus_model = 'modules/focus/mutual_gaze/focus_detection/checkpoints/group_RNET MARIA SMALL_sess_4_f1_0.82.pth'
 
         self.augmentation_size = 0.4
         self.dataset = "focus_dataset_small_easy"

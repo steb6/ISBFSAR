@@ -9,12 +9,10 @@ from modules.ar.utils.misc import aggregate_accuracy, loss_fn
 from modules.ar.utils.model import CNN_TRX
 from utils.params import TRXConfig
 import random
+from utils.params import ubuntu
 
 
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
-
-
-optimize_every = 16
 
 if __name__ == "__main__":
     args = TRXConfig()
@@ -51,94 +49,151 @@ if __name__ == "__main__":
     scheduler = MultiStepLR(optimizer, milestones=[10000, 100000], gamma=0.1)
 
     # Start WANDB
-    run = wandb.init(project="trx")
-    wandb.watch(model, log='all', log_freq=args.log_every)
+    if ubuntu:
+        run = wandb.init(project="trx")
+        wandb.watch(model, log='all', log_freq=args.log_every)
 
     # Log
     print("Train samples: {}, valid samples: {}".format(len(train_loader), len(valid_loader)))
     print("Training for {} epochs".format(args.n_epochs))
-    print("Logging every {} step".format(args.log_every))
+
+    # Open set loss
+    os_loss_fn = torch.nn.BCEWithLogitsLoss()
 
     for epoch in range(args.n_epochs):
 
+        fs_train_losses = []
+        fs_train_accuracies = []
+        os_train_losses = []
+        os_train_accuracies = []
+
+        fs_valid_losses = []
+        fs_valid_accuracies = []
+        os_valid_losses = []
+        os_valid_accuracies = []
+
         # TRAIN
         model.train()
-        train_losses = []
-        train_accuracies = []
+        torch.set_grad_enabled(True)
         for i, elem in enumerate(tqdm(train_loader)):
-            torch.set_grad_enabled(True)
-
-            support_set, target_set, support_labels, target_label = elem
+            support_set, target_set, unknown_set, support_labels, target_label = elem
 
             support_set = support_set.reshape(args.way * args.seq_len, args.n_joints * 3).cuda().float()
             target_set = target_set.reshape(args.seq_len, args.n_joints * 3).cuda().float()
+            unknown_set = unknown_set.reshape(args.seq_len, args.n_joints * 3).cuda().float()
             support_labels = support_labels.reshape(args.way).cuda().int()
             target_label = target_label.cuda()
 
+            ################
+            # Known action #
+            ################
             out = model(support_set, support_labels, target_set)
+
+            # FS known
             pred = out['logits']
 
             target = torch.zeros_like(support_labels)
             target[target_label.item()] = 1.
 
-            train_loss = loss_fn(pred.unsqueeze(0), target.unsqueeze(0), 'cuda')
-            # loss = loss / 16
-            train_loss.backward(retain_graph=False)
-            train_losses.append(train_loss.item())
+            known_fs_loss = loss_fn(pred.unsqueeze(0), target.unsqueeze(0), 'cuda')
+            fs_train_losses.append(known_fs_loss.item())
 
             train_accuracy = aggregate_accuracy(pred, target_label)
-            train_accuracies.append(train_accuracy.item())
+            fs_train_accuracies.append(train_accuracy.item())
 
-            if i % optimize_every == 0:
+            # OS known
+            pred = out['is_true']
+            known_os_loss = os_loss_fn(pred, torch.FloatTensor([1.]).unsqueeze(0).cuda())
+            os_train_losses.append(known_os_loss.item())
+            os_train_accuracies.append(1. if pred.item() > 0.5 else 0)
+
+            ##################
+            # Unknown action #
+            ##################
+            out = model(support_set, support_labels, unknown_set)
+
+            # OS unknown
+            pred = out['is_true']
+            unknown_os_loss = os_loss_fn(pred, torch.FloatTensor([0.]).unsqueeze(0).cuda())
+            os_train_losses.append(unknown_os_loss.item())
+            os_train_accuracies.append(1. if pred.item() < 0.5 else 0)
+
+            ############
+            # Optimize #
+            ############
+            final_loss = known_fs_loss + known_os_loss + unknown_os_loss
+            final_loss.backward(retain_graph=True)
+
+            if i % args.optimize_every == 0:
                 optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()
 
-            if i % args.log_every == 0:
-                wandb.log({"train/loss": sum(train_losses) / len(train_losses),
-                           "train/accuracy": sum(train_accuracies) / len(train_accuracies),
-                           "lr": optimizer.param_groups[0]['lr']})
-                train_losses = []
-                train_accuracies = []
-
         # EVAL
         model.eval()
         torch.set_grad_enabled(False)
-        valid_losses = []
-        valid_accuracies = []
         for i, elem in enumerate(tqdm(valid_loader)):
-            support_set, target_set, support_labels, target_label = elem
+            support_set, target_set, unknown_set, support_labels, target_label = elem
 
             support_set = support_set.reshape(args.way * args.seq_len, args.n_joints * 3).cuda().float()
             target_set = target_set.reshape(args.seq_len, args.n_joints * 3).cuda().float()
+            unknown_set = unknown_set.reshape(args.seq_len, args.n_joints * 3).cuda().float()
             support_labels = support_labels.reshape(args.way).cuda().int()
             target_label = target_label.cuda()
 
+            ################
+            # Known action #
+            ################
             out = model(support_set, support_labels, target_set)
+
+            # FS known
             pred = out['logits']
 
             target = torch.zeros_like(support_labels)
             target[target_label.item()] = 1.
 
-            valid_loss = loss_fn(pred.unsqueeze(0), target.unsqueeze(0), 'cuda')
-            valid_losses.append(valid_loss.item())
+            known_fs_loss = loss_fn(pred.unsqueeze(0), target.unsqueeze(0), 'cuda')
+            fs_valid_losses.append(known_fs_loss.item())
 
             valid_accuracy = aggregate_accuracy(pred, target_label)
-            valid_accuracies.append(valid_accuracy.item())
+            fs_valid_accuracies.append(valid_accuracy.item())
+
+            # OS known
+            pred = out['is_true']
+            known_os_loss = os_loss_fn(pred, torch.FloatTensor([1.]).unsqueeze(0).cuda())
+            os_valid_losses.append(known_os_loss.item())
+            os_valid_accuracies.append(1. if pred.item() > 0.5 else 0)
+
+            ##################
+            # Unknown action #
+            ##################
+            out = model(support_set, support_labels, unknown_set)
+
+            # OS unknown
+            pred = out['is_true']
+            unknown_os_loss = os_loss_fn(pred, torch.FloatTensor([0.]).unsqueeze(0).cuda())
+            os_valid_losses.append(unknown_os_loss.item())
+            os_valid_accuracies.append(1. if pred.item() < 0.5 else 0)
 
         # WANDB
         epoch_path = checkpoints_path + os.sep + '{}.pth'.format(epoch)
-        wandb.log({"valid/loss": sum(valid_losses) / len(valid_losses) if len(valid_losses) > 0 else -1,
-                   "valid/accuracy": sum(valid_accuracies) / len(valid_accuracies) if len(valid_losses) > 0 else -1,
-                   "lr": optimizer.param_groups[0]['lr']})
+        if ubuntu:
+            wandb.log({"train/fs_loss": sum(fs_train_losses) / len(fs_train_losses),
+                       "train/fs_accuracy": sum(fs_train_accuracies) / len(fs_train_accuracies),
+                       "train/os_loss": sum(os_train_losses) / len(os_train_losses),
+                       "train/os_accuracy": sum(os_train_accuracies) / len(os_train_accuracies),
+                       "valid/fs_loss": sum(fs_valid_losses) / len(fs_valid_losses),
+                       "valid/fs_accuracy": sum(fs_valid_accuracies) / len(fs_valid_accuracies),
+                       "valid/os_loss": sum(os_valid_losses) / len(os_valid_losses),
+                       "valid/os_accuracy": sum(os_valid_accuracies) / len(os_valid_accuracies),
+                       "lr": optimizer.param_groups[0]['lr']})
 
         torch.save({'epoch': epoch,
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': sum(valid_losses) / len(valid_losses) if len(valid_losses) > 0 else -1},
+                    'fs_accuracy': sum(fs_valid_accuracies) / len(fs_valid_accuracies),
+                    'os_accuracy': sum(os_valid_accuracies) / len(os_valid_accuracies)},
                    epoch_path)
 
-        # artifact.add_file(epoch_path)
-        # run.log_artifact(artifact)
-
-    run.join()
+    if ubuntu:
+        run.join()

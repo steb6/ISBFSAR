@@ -11,17 +11,17 @@ def just_text(queue):
 
 
 class RealSense:
-    def __init__(self, width=640, height=480):
+    def __init__(self, width=640, height=480, fps=30):
         self.pipeline = rs.pipeline()
         configs = {'device': 'Intel RealSense D435i'}
 
         config = rs.config()
-        config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+        config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, fps)
+        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, fps)
         self.profile = self.pipeline.start(config)
 
-        configs['depth'] = {'width': width, 'height': height, 'format': 'z16', 'fps': 30}
-        configs['color'] = {'width': width, 'height': height, 'format': 'rgb8', 'fps': 30}
+        configs['depth'] = {'width': width, 'height': height, 'format': 'z16', 'fps': fps}
+        configs['color'] = {'width': width, 'height': height, 'format': 'rgb8', 'fps': fps}
 
         HIGH_ACCURACY = 3
         HIGH_DENSITY = 4

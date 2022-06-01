@@ -88,6 +88,7 @@ class TemporalCrossTransformer(nn.Module):
         # init tensor to hold distances between every support tuple and every target tuple
         # all_distances_tensor = torch.zeros(n_queries, self.args.way).cuda()
         all_distances_tensor = []
+        prototypes = []
         for c in support_labels:
             # select keys and values for just this class
             class_k = torch.index_select(mh_support_set_ks, 0, self._extract_class_indices(support_labels, c))
@@ -131,7 +132,10 @@ class TemporalCrossTransformer(nn.Module):
             # all_distances_tensor[:, c_idx] = 1  # distance
             # all_distances_tensor = all_distances_tensor + c_idx + distance
 
-        return_dict = {'logits': torch.stack(all_distances_tensor, dim=1)}
+            prototypes.append(query_prototype)
+
+        all_distances_tensor = torch.stack(all_distances_tensor, dim=1)
+        return_dict = {'logits': all_distances_tensor, 'prototypes': prototypes, 'mh_queries_vs': mh_queries_vs}
 
         return return_dict
 
@@ -168,6 +172,23 @@ class MLP(torch.nn.Module):
         return output
 
 
+class Discriminator(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(Discriminator, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.fc1 = torch.nn.Linear(self.input_size, self.hidden_size)
+        self.relu1 = torch.nn.ReLU()
+        self.fc2 = torch.nn.Linear(self.hidden_size, self.output_size)
+
+    def forward(self, x):
+        hidden = self.fc1(x)
+        relu = self.relu1(hidden)
+        output = self.fc2(relu)
+        return output
+
+
 class CNN_TRX(nn.Module):
     """
     Standard Resnet connected to a Temporal Cross Transformer.
@@ -185,6 +206,7 @@ class CNN_TRX(nn.Module):
                                       self.args.n_joints * 3 * 2, self.trans_linear_in_dim)
 
         self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s) for s in args.temp_set])
+        self.discriminator = Discriminator(256, 128, 1)
 
     def forward(self, context_images, context_labels, target_images):
         context_features = self.features_extractor(context_images).squeeze()
@@ -195,17 +217,26 @@ class CNN_TRX(nn.Module):
         context_features = context_features.reshape(-1, self.args.seq_len, dim)
         target_features = target_features.reshape(-1, self.args.seq_len, dim)
         # TODO NEW
-        all_logits = [self.transformers[0](context_features, context_labels, target_features)['logits']]
+        out = self.transformers[0](context_features, context_labels, target_features)
+        all_logits = [out['logits']]
         # TODO OLD
         # all_logits = [t(context_features, context_labels, target_features)['logits'] for t in self.transformers]
         # TODO END
-        all_logits = torch.stack(all_logits, dim=-1)  # NOW THIS LINE CAUSES PROBLEM (?)
+        all_logits = torch.stack(all_logits, dim=-1)
 
         sample_logits = all_logits
 
-        sample_logits = torch.mean(sample_logits, dim=2)  # THIS LINE CAUSES PROBLEM (?)
+        sample_logits = torch.mean(sample_logits, dim=2)
 
-        return_dict = {'logits': sample_logits}
+        # TODO open set
+        chosen_index = torch.argmax(all_logits)
+        prototypes = out['prototypes']
+        mh_queries_vs = out['mh_queries_vs']
+        chosen_prototype = prototypes[chosen_index.item()]
+        feature = torch.cat((mh_queries_vs, chosen_prototype), dim=-1).mean(dim=-2)
+        decision = self.discriminator(feature)
+
+        return_dict = {'logits': sample_logits, 'is_true': decision}
         return return_dict
 
     def distribute_model(self):
@@ -218,3 +249,12 @@ class CNN_TRX(nn.Module):
             self.resnet = torch.nn.DataParallel(self.resnet, device_ids=[i for i in range(0, self.args.num_gpus)])
 
             self.transformers.cuda(0)
+
+
+if __name__ == "__main__":
+    from utils.params import TRXConfig
+    model = CNN_TRX(TRXConfig()).cuda()
+
+    model(torch.rand((5, 16, 90)).cuda(),
+          torch.randint(5, (5,)).cuda(),
+          torch.rand((1, 16, 90)).cuda())

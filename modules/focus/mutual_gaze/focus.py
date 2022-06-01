@@ -92,21 +92,23 @@ class FocusDetector:
 
             return out.item(), box
 
-    def print_bbox(self, img, box):
-        img = cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
+    def print_bbox(self, img, box, score):
+        img = cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), (0, 255, 0) if score>0.5 else (0, 0, 255), 2)
         return img
 
 
 if __name__ == "__main__":
 
-    cam = cv2.VideoCapture('assets/test_gaze_no_mask.mp4')
+    cam = cv2.VideoCapture(2)
     focus_detector = FocusDetector(MutualGazeConfig())
 
     for _ in tqdm(range(10000)):
         ret, img = cam.read()
+        res = focus_detector.estimate(img)
+        if res:
+            score, bbox = res
 
-        score, bbox = focus_detector.estimate(img)
-
-        # img = focus_detector.print_bbox(img, bbox)
-        # cv2.imshow("bbox", img)
-        # cv2.waitKey(1)
+            img = focus_detector.print_bbox(img, bbox, score)
+            print(score)
+            cv2.imshow("bbox", img)
+            cv2.waitKey(1)

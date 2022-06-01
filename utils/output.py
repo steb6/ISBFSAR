@@ -153,11 +153,12 @@ class VISPYVisualizer:
             self.fps.text = "FPS: {:.2f}".format(fps)
             self.distance.text = "DIST: {:.2f}m".format(distance)
 
-            m = max([_[0] for _ in results.values()]) if len(results) > 0 else 0
+            # m = max([_[0] for _ in results.values()]) if len(results) > 0 else 0  # Just max
             for i, r in enumerate(results.keys()):
                 score, requires_focus, requires_box = results[r]
                 # Check if conditions are satisfied
-                if score == m:
+                # if score == m:  # Just max
+                if score > 0.5:
                     c1 = True if not requires_focus else focus
                     c2 = True if (requires_box is None) else (box == requires_box)
                     if c1 and c2:

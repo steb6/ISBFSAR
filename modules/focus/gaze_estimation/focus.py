@@ -1,5 +1,4 @@
 import cv2
-# from ptgaze.gaze_estimator import GazeEstimator
 from modules.focus.gaze_estimation.pytorch_mpiigaze_demo.ptgaze.gaze_estimator import GazeEstimator
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation
@@ -68,8 +67,8 @@ class FocusDetector:
         # Print head pose
         axes3d = np.eye(3, dtype=float) @ Rotation.from_euler(
             'XYZ', [0, np.pi, 0]).as_matrix()
-        # head_pose = face.head_pose_rot.as_rotvec()  # TODO BEFORE
-        head_pose = np.linalg.inv(face.normalizing_rot.as_matrix()) @ face.head_pose_rot.as_rotvec()  # TODO TRY
+        head_pose = face.head_pose_rot.as_rotvec()  # TODO BEFORE
+        # head_pose = np.linalg.inv(face.normalizing_rot.as_matrix()) @ face.head_pose_rot.as_rotvec()  # TODO TRY
         axes3d = axes3d * 0.05  # length
         points2d, _ = cv2.projectPoints(axes3d, head_pose, face.head_position,
                                         self.camera_matrix,
@@ -97,15 +96,13 @@ class FocusDetector:
                                                                                     score_rot, self.foc_rot_thr),
                                 (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2, cv2.LINE_AA)
         else:
-            # head_pose = face.head_pose_rot.as_rotvec()  # TODO BEFORE
-            head_pose = np.linalg.inv(face.normalizing_rot.as_matrix()) @ face.head_pose_rot.as_rotvec()  # TODO TRY
+            head_pose = face.normalized_head_rot2d
             score = abs(head_pose[1])
             frame = cv2.putText(frame, "{:.2f} < {:.2f}".format(score, self.dist_thr), (10, 120),
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2, cv2.LINE_AA)
         return frame
 
     def estimate(self, frame):
-
         faces = self.gaze_estimator.detect_faces(frame)
 
         if len(faces) == 0:
@@ -131,7 +128,7 @@ class FocusDetector:
             # HUMAN IS NOT CLOSE, USE HEAD POSE
             else:
                 self.is_close = False
-                head_pose = face.head_pose_rot.as_rotvec()
+                head_pose = face.normalized_head_rot2d
                 score = abs(head_pose[1])
                 focus = score < self.dist_thr
 
@@ -148,37 +145,35 @@ def convert_pt(point):
 
 
 if __name__ == "__main__":
-    import numpy as np
-    import yaml
     from utils.params import FocusConfig
 
-    cap = cv2.VideoCapture('assets/test_gaze_no_mask.mp4')
-    ok, img = cap.read()
+    cap = cv2.VideoCapture(0)
+    # ok, img = cap.read()
+    # img = cv2.imread("frame.jpg")
     det = FocusDetector(FocusConfig())
 
     for _ in tqdm(range(10000000)):
+        ok, img = cap.read()
         f = det.estimate(img)
 
-        # if f is not None:
-        #     _, f = f
+        if f is not None:
+            _, f = f
 
-            # TODO START INVERSE OF HOMOGRAPHY
             # f.head_pose_rot.head_pose = f.head_pose_rot.as_rotvec() @ f.normalizing_rot
-            # TODO END INVERSE OF HOMOGRAPHY
 
-            # img = det.print_close_or_not(img)
-            # img = det.print_bbox_area(img, f)
-            # img = det.print_if_is_focus(img)
-            # img = det.print_score(img, f)
-            # img = det.print_bbox(img, f)
-            #
-            # if det.is_close:
-            #     img = det.print_gaze_pose(img, f)
-            # else:
-            #     img = det.print_head_pose(img, f)
+            img = det.print_close_or_not(img)
+            img = det.print_bbox_area(img, f)
+            img = det.print_if_is_focus(img)
+            img = det.print_score(img, f)
+            img = det.print_bbox(img, f)
 
-        # cv2.imshow('normalized', f.normalized_image)
-        # cv2.imshow('frame', img)
-        # cv2.waitKey(1)
+            if det.is_close:
+                img = det.print_gaze_pose(img, f)
+            else:
+                img = det.print_head_pose(img, f)
+
+            cv2.imshow('normalized', f.normalized_image)
+        cv2.imshow('frame', img)
+        cv2.waitKey(1)
 
     cap.release()

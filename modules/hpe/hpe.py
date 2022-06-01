@@ -96,9 +96,9 @@ class HumanPoseEstimator:
         H = self.K @ np.linalg.inv(new_K @ homo_inv)
         bbone_in = self.image_transformation([frame.astype(int), H.astype(np.float32)])
 
-        bbone_in = bbone_in[0].reshape(self.n_test, 256, 256, 3)
-        # cv2.imshow("BBONE", bbone_in[0].astype(np.uint8))  # TODO SOLVE THE MISTERY
-        # cv2.waitKey(1)  # TODO SOLVE THE MISTERY
+        bbone_in = bbone_in[0].reshape(self.n_test, 256, 256, 3)  # [..., ::-1]
+        cv2.imshow("BBONE", bbone_in[0].astype(np.uint8))  # TODO SOLVE THE MISTERY
+        cv2.waitKey(1)  # TODO SOLVE THE MISTERY
         bbone_in_ = (bbone_in / 255.0).astype(np.float32)
 
         # BackBone
@@ -156,7 +156,7 @@ class HumanPoseEstimator:
             return None, None, None
 
         # Move the skeleton into estimated absolute position if necessary  # TODO fIX
-        # pred3d = reconstruct_absolute(pred2d, pred3d, new_K, is_predicted_to_be_in_fov, weak_perspective=False)
+        pred3d = reconstruct_absolute(pred2d, pred3d, new_K[None, ...], is_predicted_to_be_in_fov, weak_perspective=False)
 
         # Go back in original space (without augmentation and homography)
         pred3d = pred3d @ homo_inv
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     from utils.matplotlib_visualizer import MPLPosePrinter
 
     args = MainConfig()
-    # vis = MPLPosePrinter()
+    vis = MPLPosePrinter()
 
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
 
@@ -219,11 +219,17 @@ if __name__ == "__main__":
     for _ in tqdm(range(10000)):
     # while True:
         ret, img = cap.read()
-        cv2.imshow("img", img)
+        # img = img[..., ::-1]
+        # cv2.imshow("img", img)
         # img = img[:, 240:-240, :]
         # img = cv2.resize(img, (640, 480))
-        h.estimate(img)
-        # p = p - p[0]
-        # vis.clear()
-        # vis.print_pose(p, e)
-        # vis.sleep(0.001)
+        p, e, _ = h.estimate(img)
+
+        if p is not None:
+            p = p * 2200
+            dist = np.linalg.norm(p[0])
+            print(dist)
+            # p = p - p[0]
+            vis.clear()
+            vis.print_pose(p, e)
+            vis.sleep(0.001)

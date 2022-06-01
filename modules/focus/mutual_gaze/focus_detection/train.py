@@ -60,10 +60,10 @@ if __name__ == "__main__":
         all_f1s = []
 
         for sess in range(5):
-            train_data = MARIAData(dataset, mode="train", split_number=sess, augmentation_size=config.augmentation_size)
+            train_data = MARIAData(dataset, mode="train", split_number=sess, augmentation_size=config.augmentation_size, valid_size=0)
             train_loader = torch.utils.data.DataLoader(train_data, batch_size=config.batch_size,
                                                        num_workers=2 if is_local else 12, shuffle=True)
-            valid_data = MARIAData(dataset, mode="valid", split_number=sess)
+            valid_data = MARIAData(dataset, mode="test", split_number=sess)
             valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=32,
                                                        num_workers=2 if is_local else 4)
             test_data = MARIAData(dataset, mode="test", split_number=sess)

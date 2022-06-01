@@ -43,7 +43,7 @@ class ISBFSAR:
                 self.cap.set(3, args.cam_width)
                 self.cap.set(4, args.cam_height)
             elif args.cam == "realsense":
-                self.cap = RealSense(width=args.cam_width, height=args.cam_height)
+                self.cap = RealSense(width=args.cam_width, height=args.cam_height, fps=60)
                 # intrinsics = self.cap.intrinsics()
                 # i = np.eye(3)
                 # i[0][0] = intrinsics.fx
