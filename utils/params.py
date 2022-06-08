@@ -5,7 +5,7 @@ engine_dir = "engines"
 print("Ubuntu: {}".format(ubuntu))
 
 seq_len = 16
-n_joints = 30
+n_joints = 25
 
 
 class MainConfig(object):
@@ -44,7 +44,8 @@ class RealSenseIntrinsics(object):
 class TRXConfig(object):
     def __init__(self):
         self.optimize_every = 16
-        self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"
+        # self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"
+        self.data_path = "D:/datasets/nturgbd_trx_skeletons" if not ubuntu else "../nturgbd_trx_skeletons"
         self.n_workers = 2 if not ubuntu else 12
         self.n_epochs = 10000
         self.log_every = 10 if not ubuntu else 1000

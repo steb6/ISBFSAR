@@ -43,3 +43,6 @@ class MPLPosePrinter:
     @staticmethod
     def sleep(t):
         plt.pause(t)
+
+    def set_title(self, title):
+        self.ax.set_title(title)
