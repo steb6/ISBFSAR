@@ -41,3 +41,32 @@ class MetrabsData(data.Dataset):
 
     def __len__(self):
         return self.n_task
+
+
+class TestMetrabsData(data.Dataset):
+    def __init__(self, samples_path, exemplars_path, test_classes):
+        self.exemplars_classes = next(os.walk(exemplars_path))[1]
+        exemplars_files = [os.path.join(samples_path, elem) for elem in self.exemplars_classes]
+        self.exemplars_poses = []
+        for example in exemplars_files:
+            with open(example+'\\0.pkl', 'rb') as file:
+                elem = pickle.load(file)
+            self.exemplars_poses.append(elem)
+        self.exemplars_poses = np.stack(self.exemplars_poses)
+        self.target_set = []
+        self.target_classes = []
+        for c in self.exemplars_classes:
+            class_path = os.path.join(samples_path, c)
+            files = next(os.walk(class_path))[2]
+            files = [os.path.join(class_path, file) for file in files]
+            self.target_set += files
+            self.target_classes += [self.exemplars_classes.index(c) for _ in range(len(files))]
+
+    def __getitem__(self, idx):  # Must return complete, imp_x and impl_y
+        with open(self.target_set[idx], 'rb') as file:
+            target_set = pickle.load(file)
+        return self.exemplars_poses, target_set, [], \
+               np.array(list(range(len(self.exemplars_classes)))), self.target_classes[idx]
+
+    def __len__(self):
+        return len(self.target_set)

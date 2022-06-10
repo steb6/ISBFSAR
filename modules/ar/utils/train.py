@@ -15,8 +15,9 @@ from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
 
-device = 0
+device = 1
 torch.cuda.set_device(device)
+start_discriminator_epoch = -1
 
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
 
@@ -132,28 +133,29 @@ if __name__ == "__main__":
             train_accuracy = aggregate_accuracy(fs_pred, target_label)
             fs_train_accuracies.append(train_accuracy.item())
 
-            if epoch > 20:
+            if epoch > start_discriminator_epoch:
                 # OS known (target depends on true class)
                 os_pred = out['is_true']
                 target = 1 if torch.argmax(fs_pred) == target_label else 0
-                known_os_loss = os_loss_fn(os_pred, torch.FloatTensor([target]).unsqueeze(0).cuda())
-                os_train_true.append(target)
-                os_train_pred.append(1 if os_pred.item() > 0.5 else 0)
-                os_train_losses.append(known_os_loss.item())
+                if target == 1:
+                    known_os_loss = os_loss_fn(os_pred, torch.FloatTensor([target]).unsqueeze(0).cuda())
+                    os_train_true.append(target)
+                    os_train_pred.append(1 if os_pred.item() > 0.5 else 0)
+                    os_train_losses.append(known_os_loss.item())
 
-                ##################
-                # Unknown action #
-                ##################
-                out = model(support_set, support_labels, unknown_set)
+                    ##################
+                    # Unknown action #
+                    ##################
+                    out = model(support_set, support_labels, unknown_set)
 
-                # OS unknown
-                os_pred = out['is_true']
-                unknown_os_loss = os_loss_fn(os_pred, torch.FloatTensor([0.]).unsqueeze(0).cuda())
-                os_train_losses.append(unknown_os_loss.item())
-                os_train_true.append(0)
-                os_train_pred.append(1 if os_pred.item() > 0.5 else 0)
+                    # OS unknown
+                    os_pred = out['is_true']
+                    unknown_os_loss = os_loss_fn(os_pred, torch.FloatTensor([0.]).unsqueeze(0).cuda())
+                    os_train_losses.append(unknown_os_loss.item())
+                    os_train_true.append(0)
+                    os_train_pred.append(1 if os_pred.item() > 0.5 else 0)
 
-                final_loss = final_loss + known_os_loss + unknown_os_loss
+                    final_loss = final_loss + known_os_loss + unknown_os_loss
             ############
             # Optimize #
             ############
@@ -193,7 +195,7 @@ if __name__ == "__main__":
             valid_accuracy = aggregate_accuracy(fs_pred, target_label)
             fs_valid_accuracies.append(valid_accuracy.item())
 
-            if epoch > 20:
+            if epoch > start_discriminator_epoch:
                 # OS known (target depends on true class)
                 os_pred = out['is_true']
                 target = 1 if torch.argmax(fs_pred) == target_label else 0
