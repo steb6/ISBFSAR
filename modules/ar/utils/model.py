@@ -25,7 +25,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        x = x + Variable(self.pe[:, :x.size(1)], requires_grad=False)
+        x = x + Variable(self.pe[:, :x.size(-2)], requires_grad=False)
         return self.dropout(x)
 
 
@@ -47,7 +47,7 @@ class TemporalCrossTransformer(nn.Module):
         self.norm_k = nn.LayerNorm(self.args.trans_linear_out_dim)
         # self.norm_v = nn.LayerNorm(self.args.trans_linear_out_dim)
 
-        self.class_softmax = torch.nn.Softmax(dim=1)
+        self.class_softmax = torch.nn.Softmax(dim=-2)
 
         # generate all tuples
         frame_idxs = [i for i in range(self.args.seq_len)]
@@ -56,16 +56,17 @@ class TemporalCrossTransformer(nn.Module):
         self.tuples_len = len(self.tuples)
 
     def forward(self, support_set, support_labels, queries):
-        n_queries = queries.shape[0]
-        n_support = support_set.shape[0]
+        n_queries = queries.shape[1]
+        n_support = support_set.shape[1]
+        batch_size = queries.shape[0]
 
         # static pe
         support_set = self.pe(support_set)
         queries = self.pe(queries)
 
         # construct new queries and support set made of tuples of images after pe
-        s = [torch.index_select(support_set, -2, p).reshape(n_support, -1) for p in self.tuples]  # TODO PARAMETRIZE
-        q = [torch.index_select(queries, -2, p).reshape(n_queries, -1) for p in self.tuples]  # TODO PARAMETRIZE
+        s = [torch.index_select(support_set, -2, p).reshape(batch_size, n_support, -1) for p in self.tuples]
+        q = [torch.index_select(queries, -2, p).reshape(batch_size, n_queries, -1) for p in self.tuples]
         support_set = torch.stack(s, dim=-2)
         queries = torch.stack(q, dim=-2)
 
@@ -89,36 +90,36 @@ class TemporalCrossTransformer(nn.Module):
         # all_distances_tensor = torch.zeros(n_queries, self.args.way).cuda()
         all_distances_tensor = []
         prototypes = []
-        for c in support_labels:
+        for c in support_labels[0]:
             # select keys and values for just this class
-            class_k = torch.index_select(mh_support_set_ks, 0, self._extract_class_indices(support_labels, c))
-            class_v = torch.index_select(mh_support_set_vs, 0, self._extract_class_indices(support_labels, c))
-            k_bs = class_k.shape[0]
+            class_k = torch.index_select(mh_support_set_ks, -3, c)
+            class_v = torch.index_select(mh_support_set_vs, -3, c)
+            # k_bs = class_k.shape[0]
 
-            class_scores = torch.matmul(mh_queries_ks.unsqueeze(1), class_k.transpose(-2, -1)) / math.sqrt(
+            class_scores = torch.matmul(mh_queries_ks, class_k.transpose(-2, -1)) / math.sqrt(
                 self.args.trans_linear_out_dim)
 
             # reshape etc. to apply a softmax for each query tuple
-            class_scores = class_scores.permute(0, 2, 1, 3)
-            class_scores = class_scores.reshape(n_queries, self.tuples_len, self.tuples_len)  # -1
+            # class_scores = class_scores.permute(0, 2, 1, 3)
+            # class_scores = class_scores.reshape(batch_size, n_queries, self.tuples_len, self.tuples_len)  # -1
 
             # TODO BEFORE
-            # class_scores_real = self.class_softmax(class_scores[0])
+            class_scores = self.class_softmax(class_scores)
             # TODO NEW
-            max_along_axis = class_scores[0].max(dim=1, keepdim=True).values
-            exponential = torch.exp(class_scores[0] - max_along_axis)
-            denominator = torch.sum(exponential, dim=1, keepdim=True)
-            denominator = denominator.repeat(1, self.tuples_len)
-            class_scores = torch.div(exponential, denominator)
+            # max_along_axis = class_scores.max(dim=-2, keepdim=True).values
+            # exponential = torch.exp(class_scores[0] - max_along_axis)
+            # denominator = torch.sum(exponential, dim=-2, keepdim=True)
+            # denominator = denominator.repeat(1, self.tuples_len)
+            # class_scores = torch.div(exponential, denominator)
             # TODO END
 
             # class_scores = torch.cat(class_scores)
-            class_scores = class_scores.reshape(n_queries, self.tuples_len, 1, self.tuples_len)  # -1
-            class_scores = class_scores.permute(0, 2, 1, 3)
+            # class_scores = class_scores.reshape(batch_size, n_queries, self.tuples_len, 1, self.tuples_len)  # -1
+            # class_scores = class_scores.permute(0, 1, 3, 2, 4)
 
             # get query specific class prototype
             query_prototype = torch.matmul(class_scores, class_v)
-            query_prototype = torch.sum(query_prototype, dim=1)
+            # query_prototype = torch.sum(query_prototype, dim=1)
 
             # calculate distances from queries to query-specific class prototypes
             diff = mh_queries_vs - query_prototype
@@ -134,7 +135,8 @@ class TemporalCrossTransformer(nn.Module):
 
             prototypes.append(query_prototype)
 
-        all_distances_tensor = torch.stack(all_distances_tensor, dim=1)
+        all_distances_tensor = torch.cat(all_distances_tensor, dim=1)
+        prototypes = torch.cat(prototypes, dim=1)
         return_dict = {'logits': all_distances_tensor, 'prototypes': prototypes, 'mh_queries_vs': mh_queries_vs}
 
         return return_dict
@@ -209,34 +211,36 @@ class CNN_TRX(nn.Module):
         self.discriminator = Discriminator(256, 128, 1)
 
     def forward(self, context_images, context_labels, target_images):
-        context_features = self.features_extractor(context_images).squeeze()
-        target_features = self.features_extractor(target_images).squeeze()
+        batch_size = context_images.size(0)
+        context_features = self.features_extractor(context_images)
+        target_features = self.features_extractor(target_images)
 
-        dim = self.trans_linear_in_dim
-
-        context_features = context_features.reshape(-1, self.args.seq_len, dim)
-        target_features = target_features.reshape(-1, self.args.seq_len, dim)
-        # TODO NEW
+        # dim = self.trans_linear_in_dim
+        #
+        # context_features = context_features.reshape(-1, self.args.seq_len, dim)
+        # target_features = target_features.reshape(-1, self.args.seq_len, dim)
+        # TODO NEW  # 40 16 256,       8, 5          8, 16, 256
+        target_features = target_features.unsqueeze(1)
         out = self.transformers[0](context_features, context_labels, target_features)
-        all_logits = [out['logits']]
+        all_logits = out['logits']
         # TODO OLD
         # all_logits = [t(context_features, context_labels, target_features)['logits'] for t in self.transformers]
         # TODO END
-        all_logits = torch.stack(all_logits, dim=-1)
+        # all_logits = torch.stack(all_logits, dim=-1)
 
-        sample_logits = all_logits
+        # sample_logits = all_logits
 
-        sample_logits = torch.mean(sample_logits, dim=2)
+        # sample_logits = torch.mean(sample_logits, dim=2)
 
         # TODO open set
-        chosen_index = torch.argmax(all_logits)
+        chosen_index = torch.argmax(all_logits, dim=1)
         prototypes = out['prototypes']
         mh_queries_vs = out['mh_queries_vs']
-        chosen_prototype = prototypes[chosen_index.item()]
-        feature = torch.cat((mh_queries_vs, chosen_prototype), dim=-1).mean(dim=-2)
+        chosen_prototype = prototypes[torch.arange(batch_size), chosen_index.squeeze()].unsqueeze(1)
+        feature = torch.cat((mh_queries_vs, chosen_prototype), dim=-1).mean(dim=-2).squeeze(1)
         decision = self.discriminator(feature)
 
-        return_dict = {'logits': sample_logits, 'is_true': decision}
+        return_dict = {'logits': all_logits, 'is_true': decision}
         return return_dict
 
     def distribute_model(self):

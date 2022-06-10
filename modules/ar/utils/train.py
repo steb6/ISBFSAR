@@ -5,7 +5,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 import wandb
 from tqdm import tqdm
 from modules.ar.utils.dataloader import MetrabsData
-from modules.ar.utils.misc import aggregate_accuracy, loss_fn
+# from modules.ar.utils.misc import aggregate_accuracy, loss_fn
 from modules.ar.utils.model import CNN_TRX
 from utils.params import TRXConfig
 import random
@@ -14,10 +14,10 @@ from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
+import numpy as np
 
 device = 1
 torch.cuda.set_device(device)
-start_discriminator_epoch = -1
 
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
 
@@ -69,8 +69,8 @@ if __name__ == "__main__":
     test_data.classes = test_classes
 
     # Create loaders
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=1, num_workers=args.n_workers)
-    valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=1, num_workers=args.n_workers)
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, num_workers=args.n_workers)
+    valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.batch_size, num_workers=args.n_workers)
 
     # Create optimizer and scheduler
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-2)
@@ -88,6 +88,7 @@ if __name__ == "__main__":
 
     # Open set loss
     os_loss_fn = torch.nn.BCEWithLogitsLoss()
+    fs_loss_fn = torch.nn.CrossEntropyLoss()
 
     for epoch in range(args.n_epochs):
 
@@ -107,12 +108,13 @@ if __name__ == "__main__":
         model.train()
         torch.set_grad_enabled(True)
         for i, elem in enumerate(tqdm(train_loader)):
-            support_set, target_set, unknown_set, support_labels, target_label = elem
+            support_set, target_set, _, support_labels, target_label = elem
+            batch_size = support_set.size(0)
 
-            support_set = support_set.reshape(args.way * args.seq_len, args.n_joints * 3).cuda().float()
-            target_set = target_set.reshape(args.seq_len, args.n_joints * 3).cuda().float()
-            unknown_set = unknown_set.reshape(args.seq_len, args.n_joints * 3).cuda().float()
-            support_labels = support_labels.reshape(args.way).cuda().int()
+            support_set = support_set.reshape(batch_size, args.way, args.seq_len, args.n_joints * 3).cuda().float()
+            target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
+            # unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
+            support_labels = support_labels.reshape(batch_size, args.way).cuda().int()
             target_label = target_label.cuda()
 
             ################
@@ -122,40 +124,40 @@ if __name__ == "__main__":
 
             # FS known
             fs_pred = out['logits']
-
-            target = torch.zeros_like(support_labels)
-            target[target_label.item()] = 1.
-
-            known_fs_loss = loss_fn(fs_pred.unsqueeze(0), target.unsqueeze(0), 'cuda')
+            target = torch.zeros_like(fs_pred)
+            target[torch.arange(batch_size), target_label.long()] = 1
+            scores = torch.softmax(fs_pred, dim=1)
+            known_fs_loss = fs_loss_fn(scores, target)
             fs_train_losses.append(known_fs_loss.item())
             final_loss = known_fs_loss
 
-            train_accuracy = aggregate_accuracy(fs_pred, target_label)
-            fs_train_accuracies.append(train_accuracy.item())
+            train_accuracy = torch.eq(torch.argmax(scores, dim=1), target_label).int().float().mean().item()
+            fs_train_accuracies.append(train_accuracy)
 
-            if epoch > start_discriminator_epoch:
+            if epoch > args.start_discriminator_after_epoch:
                 # OS known (target depends on true class)
                 os_pred = out['is_true']
-                target = 1 if torch.argmax(fs_pred) == target_label else 0
-                if target == 1:
-                    known_os_loss = os_loss_fn(os_pred, torch.FloatTensor([target]).unsqueeze(0).cuda())
-                    os_train_true.append(target)
-                    os_train_pred.append(1 if os_pred.item() > 0.5 else 0)
-                    os_train_losses.append(known_os_loss.item())
+                target = torch.eq(torch.argmax(fs_pred, dim=1), target_label).float().unsqueeze(-1)
+                known_os_loss = os_loss_fn(os_pred, target)
+                os_train_true.append(target.cpu().numpy())
+                os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
+                os_train_losses.append(known_os_loss.item())
 
-                    ##################
-                    # Unknown action #
-                    ##################
-                    out = model(support_set, support_labels, unknown_set)
+                # ##################
+                # # Unknown action #
+                # ##################
+                # out = model(support_set, support_labels, unknown_set)
+                #
+                # # OS unknown
+                # os_pred = out['is_true']
+                # target = torch.zeros_like(os_pred)
+                # unknown_os_loss = os_loss_fn(os_pred.squeeze(), target)
+                #
+                # os_train_losses.append(unknown_os_loss.item())
+                # os_train_true.append(target.cpu().numpy())
+                # os_train_pred.append((os_pred > 0.5).float())
 
-                    # OS unknown
-                    os_pred = out['is_true']
-                    unknown_os_loss = os_loss_fn(os_pred, torch.FloatTensor([0.]).unsqueeze(0).cuda())
-                    os_train_losses.append(unknown_os_loss.item())
-                    os_train_true.append(0)
-                    os_train_pred.append(1 if os_pred.item() > 0.5 else 0)
-
-                    final_loss = final_loss + known_os_loss + unknown_os_loss
+                final_loss = final_loss + known_os_loss  # + unknown_os_loss
             ############
             # Optimize #
             ############
@@ -170,12 +172,13 @@ if __name__ == "__main__":
         model.eval()
         torch.set_grad_enabled(False)
         for i, elem in enumerate(tqdm(valid_loader)):
-            support_set, target_set, unknown_set, support_labels, target_label = elem
+            support_set, target_set, _, support_labels, target_label = elem
+            batch_size = support_set.size(0)
 
-            support_set = support_set.reshape(args.way * args.seq_len, args.n_joints * 3).cuda().float()
-            target_set = target_set.reshape(args.seq_len, args.n_joints * 3).cuda().float()
-            unknown_set = unknown_set.reshape(args.seq_len, args.n_joints * 3).cuda().float()
-            support_labels = support_labels.reshape(args.way).cuda().int()
+            support_set = support_set.reshape(batch_size, args.way, args.seq_len, args.n_joints * 3).cuda().float()
+            target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
+            # unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
+            support_labels = support_labels.reshape(batch_size, args.way).cuda().int()
             target_label = target_label.cuda()
 
             ################
@@ -185,38 +188,44 @@ if __name__ == "__main__":
 
             # FS known
             fs_pred = out['logits']
-
-            target = torch.zeros_like(support_labels)
-            target[target_label.item()] = 1.
-
-            known_fs_loss = loss_fn(fs_pred.unsqueeze(0), target.unsqueeze(0), 'cuda')
+            target = torch.zeros_like(fs_pred)
+            target[torch.arange(batch_size), target_label.long()] = 1
+            scores = torch.softmax(fs_pred, dim=1)
+            known_fs_loss = fs_loss_fn(scores, target)
             fs_valid_losses.append(known_fs_loss.item())
+            final_loss = known_fs_loss
 
-            valid_accuracy = aggregate_accuracy(fs_pred, target_label)
-            fs_valid_accuracies.append(valid_accuracy.item())
+            valid_accuracy = torch.eq(torch.argmax(scores, dim=1), target_label).int().float().mean().item()
+            fs_valid_accuracies.append(valid_accuracy)
 
-            if epoch > start_discriminator_epoch:
+            if epoch > args.start_discriminator_after_epoch:
                 # OS known (target depends on true class)
                 os_pred = out['is_true']
-                target = 1 if torch.argmax(fs_pred) == target_label else 0
-                known_os_loss = os_loss_fn(os_pred, torch.FloatTensor([target]).unsqueeze(0).cuda())
-                os_valid_true.append(target)
-                os_valid_pred.append(1 if os_pred.item() > 0.5 else 0)
+                target = torch.eq(torch.argmax(fs_pred, dim=1), target_label).float().unsqueeze(-1)
+                known_os_loss = os_loss_fn(os_pred, target)
+                os_valid_true.append(target.cpu().numpy())
+                os_valid_pred.append((os_pred > 0.5).float().cpu().numpy())
                 os_valid_losses.append(known_os_loss.item())
 
-                ##################
-                # Unknown action #
-                ##################
-                out = model(support_set, support_labels, unknown_set)
-
-                # OS unknown
-                os_pred = out['is_true']
-                unknown_os_loss = os_loss_fn(os_pred, torch.FloatTensor([0.]).unsqueeze(0).cuda())
-                os_valid_losses.append(unknown_os_loss.item())
-                os_valid_true.append(0)
-                os_valid_pred.append(1 if os_pred.item() > 0.5 else 0)
+                # ##################
+                # # Unknown action #
+                # ##################
+                # out = model(support_set, support_labels, unknown_set)
+                #
+                # # OS unknown
+                # os_pred = out['is_true']
+                # target = torch.zeros_like(os_pred)
+                # unknown_os_loss = os_loss_fn(os_pred.squeeze(), target)
+                #
+                # os_valid_losses.append(unknown_os_loss.item())
+                # os_valid_true.append(target.cpu().numpy())
+                # os_valid_pred.append((os_pred > 0.5).float())
 
         # WANDB
+        os_train_true = np.concatenate(os_train_true, axis=None)
+        os_train_pred = np.concatenate(os_train_pred, axis=None)
+        os_valid_true = np.concatenate(os_valid_true, axis=None)
+        os_valid_pred = np.concatenate(os_valid_pred, axis=None)
         epoch_path = checkpoints_path + os.sep + '{}.pth'.format(epoch)
         if ubuntu:
             wandb.log({"train/fs_loss": sum(fs_train_losses) / len(fs_train_losses),
@@ -226,6 +235,8 @@ if __name__ == "__main__":
                        "train/os_precision": precision_score(os_train_true, os_train_pred, zero_division=0),
                        "train/os_recall": recall_score(os_train_true, os_train_pred, zero_division=0),
                        "train/os_f1": f1_score(os_train_true, os_train_pred, zero_division=0),
+                       "train/os_n_1_true": os_train_true.mean(),
+                       "train/os_n_1_pred": os_train_pred.mean(),
 
                        "valid/fs_loss": sum(fs_valid_losses) / len(fs_valid_losses),
                        "valid/fs_accuracy": sum(fs_valid_accuracies) / len(fs_valid_accuracies),
@@ -234,6 +245,9 @@ if __name__ == "__main__":
                        "valid/os_precision": precision_score(os_valid_true, os_valid_pred, zero_division=0),
                        "valid/os_recall": recall_score(os_valid_true, os_valid_pred, zero_division=0),
                        "valid/os_f1": f1_score(os_valid_true, os_valid_pred, zero_division=0),
+                       "valid/os_n_1_true": os_valid_true.mean(),
+                       "valid/os_n_1_pred": os_valid_pred.mean(),
+
                        "lr": optimizer.param_groups[0]['lr']})
 
         torch.save({'epoch': epoch,

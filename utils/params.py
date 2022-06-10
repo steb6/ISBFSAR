@@ -43,10 +43,12 @@ class RealSenseIntrinsics(object):
 
 class TRXConfig(object):
     def __init__(self):
-        self.optimize_every = 16
+        self.optimize_every = 1
+        self.batch_size = 64
+        self.start_discriminator_after_epoch = -1
         # self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"
         self.data_path = "D:/datasets/nturgbd_trx_skeletons" if not ubuntu else "../nturgbd_trx_skeletons"
-        self.n_workers = 2 if not ubuntu else 12
+        self.n_workers = 2 if not ubuntu else 20
         self.n_epochs = 10000
         self.log_every = 10 if not ubuntu else 1000
         self.trt_path = 'modules/ar/modules/{}/trx.engine'.format(engine_dir)
