@@ -45,7 +45,7 @@ class TRXConfig(object):
     def __init__(self):
         self.optimize_every = 1
         self.batch_size = 32
-        self.start_discriminator_after_epoch = 1000000
+        self.start_discriminator_after_epoch = -1
         self.first_mile = 15
         self.second_mile = 1500
         # self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"

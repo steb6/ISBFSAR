@@ -16,7 +16,7 @@ from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
 import numpy as np
 
-device = 0 if ubuntu else 0
+device = 1 if ubuntu else 0
 torch.cuda.set_device(device)
 
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
@@ -139,6 +139,15 @@ if __name__ == "__main__":
                 # OS known (target depends on true class)
                 os_pred = out['is_true']
                 target = torch.eq(torch.argmax(fs_pred, dim=1), target_label).float().unsqueeze(-1)
+
+                true_s = (target == 1.).nonzero(as_tuple=True)[0]
+                false_s = (target == 0.).nonzero(as_tuple=True)[0]
+                n = min(len(true_s), len(false_s))
+                true_s = true_s[:n]
+                false_s = false_s[:n]
+                os_pred = os_pred[torch.cat((true_s, false_s))]
+                target = target[torch.cat((true_s, false_s))]
+
                 known_os_loss = os_loss_fn(os_pred, target)
                 os_train_true.append(target.cpu().numpy())
                 os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
@@ -203,6 +212,15 @@ if __name__ == "__main__":
                 # OS known (target depends on true class)
                 os_pred = out['is_true']
                 target = torch.eq(torch.argmax(fs_pred, dim=1), target_label).float().unsqueeze(-1)
+
+                true_s = (target == 1.).nonzero(as_tuple=True)[0]
+                false_s = (target == 0.).nonzero(as_tuple=True)[0]
+                n = min(len(true_s), len(false_s))
+                true_s = true_s[:n]
+                false_s = false_s[:n]
+                os_pred = os_pred[torch.cat((true_s, false_s))]
+                target = target[torch.cat((true_s, false_s))]
+
                 known_os_loss = os_loss_fn(os_pred, target)
                 os_valid_true.append(target.cpu().numpy())
                 os_valid_pred.append((os_pred > 0.5).float().cpu().numpy())
