@@ -174,21 +174,47 @@ class MLP(torch.nn.Module):
         return output
 
 
-class Discriminator(torch.nn.Module):
+class DiscriminatorNaive(torch.nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
-        super(Discriminator, self).__init__()
+        super(DiscriminatorNaive, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.fc1 = torch.nn.Linear(self.input_size, self.hidden_size)
         self.relu1 = torch.nn.ReLU()
         self.fc2 = torch.nn.Linear(self.hidden_size, self.output_size)
+        self.out = torch.nn.Sigmoid()
 
     def forward(self, x):
         hidden = self.fc1(x)
         relu = self.relu1(hidden)
         output = self.fc2(relu)
-        return output
+        out = self.out(output)
+        return out
+
+
+class DiscriminatorReductor(torch.nn.Module):
+    def __init__(self, seq_len=120, dim=128):
+        super(DiscriminatorReductor, self).__init__()
+        self.dimensionality_reduction = torch.nn.Linear(dim, 16)
+        self.fc1 = torch.nn.Linear(seq_len*16, 256)
+        self.relu1 = torch.nn.ReLU()
+        self.fc2 = torch.nn.Linear(256, 64)
+        self.relu2 = torch.nn.ReLU()
+        self.fc3 = torch.nn.Linear(64, 1)
+        self.out = torch.nn.Sigmoid()
+
+    def forward(self, x):
+        batch_size = x.size(0)
+        y = self.dimensionality_reduction(x)
+        y = y.reshape(batch_size, -1)
+        y = self.fc1(y)
+        y = self.relu1(y)
+        y = self.fc2(y)
+        y = self.relu2(y)
+        y = self.fc3(y)
+        y = self.out(y)
+        return y
 
 
 class CNN_TRX(nn.Module):
@@ -208,7 +234,7 @@ class CNN_TRX(nn.Module):
                                       self.args.n_joints * 3 * 2, self.trans_linear_in_dim)
 
         self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s) for s in args.temp_set])
-        self.discriminator = Discriminator(256, 128, 1)
+        self.discriminator = DiscriminatorReductor()
 
     def forward(self, context_images, context_labels, target_images):
         batch_size = context_images.size(0)
@@ -237,7 +263,9 @@ class CNN_TRX(nn.Module):
         prototypes = out['prototypes']
         mh_queries_vs = out['mh_queries_vs']
         chosen_prototype = prototypes[torch.arange(batch_size), chosen_index.squeeze()].unsqueeze(1)
-        feature = torch.cat((mh_queries_vs, chosen_prototype), dim=-1).mean(dim=-2).squeeze(1)
+
+        feature = mh_queries_vs - chosen_prototype
+        # feature = torch.cat((mh_queries_vs, chosen_prototype), dim=-1).mean(dim=-2).squeeze(1)
         decision = self.discriminator(feature)
 
         return_dict = {'logits': all_logits, 'is_true': decision}

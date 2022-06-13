@@ -37,7 +37,7 @@ if __name__ == "__main__":
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=32, num_workers=args.n_workers)
 
     # Open set loss
-    os_loss_fn = torch.nn.BCEWithLogitsLoss()
+    os_loss_fn = torch.nn.BCELoss()
     fs_loss_fn = torch.nn.CrossEntropyLoss()
 
     fs_test_losses = []

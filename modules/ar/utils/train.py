@@ -16,7 +16,7 @@ from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
 import numpy as np
 
-device = 1
+device = 0 if ubuntu else 0
 torch.cuda.set_device(device)
 
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
@@ -75,11 +75,12 @@ if __name__ == "__main__":
     # Create optimizer and scheduler
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-2)
     optimizer.zero_grad()
-    scheduler = MultiStepLR(optimizer, milestones=[10000, 100000], gamma=0.1)
+    scheduler = MultiStepLR(optimizer, milestones=[args.first_mile, args.second_mile],
+                            gamma=0.1)
 
     # Start WANDB
     if ubuntu:
-        run = wandb.init(project="trx", settings=wandb.Settings(start_method='fork'))
+        run = wandb.init(project="trx", settings=wandb.Settings(start_method='fork'), config=args.__dict__)
         wandb.watch(model, log='all', log_freq=args.log_every)
 
     # Log
@@ -87,7 +88,7 @@ if __name__ == "__main__":
     print("Training for {} epochs".format(args.n_epochs))
 
     # Open set loss
-    os_loss_fn = torch.nn.BCEWithLogitsLoss()
+    os_loss_fn = torch.nn.BCELoss()
     fs_loss_fn = torch.nn.CrossEntropyLoss()
 
     for epoch in range(args.n_epochs):
@@ -126,8 +127,8 @@ if __name__ == "__main__":
             fs_pred = out['logits']
             target = torch.zeros_like(fs_pred)
             target[torch.arange(batch_size), target_label.long()] = 1
-            scores = torch.softmax(fs_pred, dim=1)
-            known_fs_loss = fs_loss_fn(scores, target)
+            scores = fs_pred
+            known_fs_loss = fs_loss_fn(fs_pred, target)
             fs_train_losses.append(known_fs_loss.item())
             final_loss = known_fs_loss
 
@@ -166,8 +167,8 @@ if __name__ == "__main__":
             if i % args.optimize_every == 0:
                 optimizer.step()
                 optimizer.zero_grad()
-                scheduler.step()
 
+        scheduler.step()
         # EVAL
         model.eval()
         torch.set_grad_enabled(False)
@@ -190,7 +191,7 @@ if __name__ == "__main__":
             fs_pred = out['logits']
             target = torch.zeros_like(fs_pred)
             target[torch.arange(batch_size), target_label.long()] = 1
-            scores = torch.softmax(fs_pred, dim=1)
+            scores = fs_pred
             known_fs_loss = fs_loss_fn(scores, target)
             fs_valid_losses.append(known_fs_loss.item())
             final_loss = known_fs_loss
@@ -222,10 +223,10 @@ if __name__ == "__main__":
                 # os_valid_pred.append((os_pred > 0.5).float())
 
         # WANDB
-        os_train_true = np.concatenate(os_train_true, axis=None)
-        os_train_pred = np.concatenate(os_train_pred, axis=None)
-        os_valid_true = np.concatenate(os_valid_true, axis=None)
-        os_valid_pred = np.concatenate(os_valid_pred, axis=None)
+        os_train_true = np.concatenate(os_train_true, axis=None) if len(os_train_true) > 0 else np.zeros(1)
+        os_train_pred = np.concatenate(os_train_pred, axis=None) if len(os_train_pred) > 0 else np.zeros(1)
+        os_valid_true = np.concatenate(os_valid_true, axis=None) if len(os_valid_true) > 0 else np.zeros(1)
+        os_valid_pred = np.concatenate(os_valid_pred, axis=None) if len(os_valid_pred) > 0 else np.zeros(1)
         epoch_path = checkpoints_path + os.sep + '{}.pth'.format(epoch)
         if ubuntu:
             wandb.log({"train/fs_loss": sum(fs_train_losses) / len(fs_train_losses),
