@@ -5,8 +5,8 @@ import numpy as np
 from tqdm import tqdm
 from utils.matplotlib_visualizer import MPLPosePrinter
 
-in_dataset_path = ["D:\\datasets\\nturgb+d_skeletons-1-17", "D:\\datasets\\nturgb+d_skeletons-18-32"]
-out_dataset_path = "D:\\datasets\\nturgbd_trx_skeletons"
+in_dataset_path = ["D:\\datasets\\useless\\nturgb+d_skeletons-1-17", "D:\\datasets\\useless\\nturgb+d_skeletons-18-32"]
+out_dataset_path = "D:\\datasets\\nturgbd_trx_skeletons_ALL"
 classes_path = "assets/nturgbd_classes.txt"
 n = 16
 
@@ -58,10 +58,10 @@ if __name__ == "__main__":
         index, name, _ = c.split(".")
         name = name.strip().replace(" ", "_").replace("/", "-").replace("’", "")
         class_dict[index] = name
-    two_person = ['A50', 'A51', 'A52', 'A53', 'A54', 'A55', 'A56', 'A57', 'A58', 'A59', 'A60', 'A106', 'A107', 'A108',
-                  'A109', 'A110', 'A111', 'A112', 'A113', 'A114', 'A115', 'A116', 'A117', 'A118', 'A119', 'A120']
-    for elem in two_person:
-        class_dict.pop(elem)
+    # two_person = ['A50', 'A51', 'A52', 'A53', 'A54', 'A55', 'A56', 'A57', 'A58', 'A59', 'A60', 'A106', 'A107', 'A108',
+    #               'A109', 'A110', 'A111', 'A112', 'A113', 'A114', 'A115', 'A116', 'A117', 'A118', 'A119', 'A120']
+    # for elem in two_person:
+    #     class_dict.pop(elem)
 
     # Create output directories ( and remove old one if presents)
     for value in list(class_dict.values()):
@@ -77,18 +77,18 @@ if __name__ == "__main__":
                 for file in files:
                     # Check if this file has missing skeleton
                     if file.split('.')[0] in missing_skeleton:
-                        # print("Skipping file because of missing skeleton")
+                        print("Skipping file because of missing skeleton")
                         continue
 
                     # Retrieve class name (between A and _ es 'S001C001P001R001A001_rgb.avi'
                     class_id = int(file.split("A")[-1].split(".")[0])  # take the integer of the class
-                    if 50 <= class_id <= 60 or class_id >= 106:
-                        # print("Skipping two person (by id)")
-                        continue
+                    # if 50 <= class_id <= 60 or class_id >= 106:
+                    #     # print("Skipping two person (by id)")
+                    #     continue
                     class_id = "A" + str(class_id)
                     class_name = class_dict[class_id]
 
-                    # Check if output path already exists
+                    # Get offset
                     output_path = os.path.join(out_dataset_path, class_name)
                     offset = sum([len(files) for r, d, files in os.walk(output_path)])
                     output_path = os.path.join(output_path, str(offset) + '.pkl')
@@ -98,26 +98,40 @@ if __name__ == "__main__":
                         lines = infile.readlines()
 
                     n_frame = int(lines[0].strip())
-                    pose_sequence = []
+                    pose_sequences = {}
                     offset = 1
                     for i in range(n_frame):
+
                         body_count = int(lines[offset].strip())
+                        offset += 1  # go to info line
 
-                        # If there are two person, ignore this frame
-                        if body_count != 1:
-                            # print("Skipping frame (found 2 skeletons)")
-                            continue
+                        for k in range(body_count):
 
-                        joint_count = int(lines[offset + 2].strip())
-                        pose = []
-                        for j in range(joint_count):
-                            pose.append(lines[offset + 3 + j].strip().split(' ')[:3])
-                        pose_sequence.append(pose)
-                        offset += joint_count + 3
+                            body_id = lines[offset].split()[0]
+                            offset += 1  # go to joint number line
+                            joint_count = int(lines[offset].strip())
+                            offset += 1  # Advance to coordinates
 
-                    if len(pose_sequence) < n:
-                        # print("Skipping (not enough poses)")
+                            pose = []
+                            for _ in range(joint_count):
+                                pose.append(lines[offset].strip().split(' ')[:3])
+                                offset += 1  # Next line
+                            if body_id in pose_sequences.keys():
+                                pose_sequences[body_id].append(pose)
+                            else:
+                                pose_sequences[body_id] = list([pose])
+                            # if body_count > 1:
+                            #     offset -= 1  # Skip
+
+                    if len(pose_sequences) == 0:
+                        print("No skeleton found!")
                         continue
+                    pose_sequence = pose_sequences[max(pose_sequences, key=lambda item: len(pose_sequences[item]))]
+                    if len(pose_sequence) < n:
+                        print("Skipping (not enough poses)")
+                        continue
+
+                    extracted = []
 
                     # Select just n frames
                     n_pose = len(pose_sequence) - (len(pose_sequence) % n)
@@ -130,13 +144,15 @@ if __name__ == "__main__":
                     pose_sequence = np.array(pose_sequence).astype(float)
                     pose_sequence -= pose_sequence[:, 0, :][:, None, :]  # Center skeleton
 
-                    # Save result
+                    # Assert
+                    chosen = pose_sequence
+                    assert len(chosen) == n
+
                     with open(output_path, "wb") as f:
-                        pickle.dump(pose_sequence, f)
-                    assert len(pose_sequence) == n
+                        pickle.dump(np.stack(chosen), f)
 
                     # Visualize
-                    for frame in pose_sequence:
+                    for frame in chosen:
                         if VIS_DEBUG:
                             vis.set_title(class_name)
                             vis.clear()

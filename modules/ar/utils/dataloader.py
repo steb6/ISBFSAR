@@ -44,9 +44,12 @@ class MetrabsData(data.Dataset):
 
 
 class TestMetrabsData(data.Dataset):
-    def __init__(self, samples_path, exemplars_path, test_classes):
-        self.exemplars_classes = next(os.walk(exemplars_path))[1]
-        exemplars_files = [os.path.join(samples_path, elem) for elem in self.exemplars_classes]
+    # Test classes: classes to add in support set
+    # Os classes: other class to consider (together with test classes)
+
+    def __init__(self, samples_path, exemplars_path, test_classes, os_classes):
+        self.exemplars_classes = test_classes  # next(os.walk(exemplars_path))[1]
+        exemplars_files = [os.path.join(exemplars_path, elem) for elem in self.exemplars_classes]
         self.exemplars_poses = []
         for example in exemplars_files:
             with open(example+'\\0.pkl', 'rb') as file:
@@ -55,18 +58,46 @@ class TestMetrabsData(data.Dataset):
         self.exemplars_poses = np.stack(self.exemplars_poses)
         self.target_set = []
         self.target_classes = []
+        self.target_names = []
+        self.support_names = test_classes
+        self.unknowns = []
+        self.unknowns_names = []
+
         for c in self.exemplars_classes:
             class_path = os.path.join(samples_path, c)
             files = next(os.walk(class_path))[2]
             files = [os.path.join(class_path, file) for file in files]
             self.target_set += files
             self.target_classes += [self.exemplars_classes.index(c) for _ in range(len(files))]
+            self.target_names += [c for _ in range(len(files))]
+
+        for c in os_classes:
+            class_path = os.path.join(samples_path, c)
+            files = next(os.walk(class_path))[2]
+            files = [os.path.join(class_path, file) for file in files]
+            self.target_set += files
+            self.target_classes += [-1 for _ in range(len(files))]
+            self.target_names += [c for _ in range(len(files))]
+
+            self.unknowns += files
+            self.unknowns_names += [c for _ in range(len(files))]
 
     def __getitem__(self, idx):  # Must return complete, imp_x and impl_y
         with open(self.target_set[idx], 'rb') as file:
             target_set = pickle.load(file)
-        return self.exemplars_poses, target_set, [], \
-               np.array(list(range(len(self.exemplars_classes)))), self.target_classes[idx]
+        unknown = []
+        unknown_name = []
+        if len(self.unknowns) > 0:
+            unknown_id = random.choice(list(range(len(self.unknowns))))
+            unknown = self.unknowns[unknown_id]
+            with open(unknown, 'rb') as file:
+                unknown = pickle.load(file)
+            unknown_name = self.unknowns_names[unknown_id]
+        return self.exemplars_poses, target_set, unknown, \
+               np.array(list(range(len(self.exemplars_classes)))), self.target_classes[idx], self.support_names, \
+               self.target_names[idx], unknown_name
 
     def __len__(self):
         return len(self.target_set)
+
+

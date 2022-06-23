@@ -110,6 +110,7 @@ class ISBFSAR:
 
         # Make inference
         results = self.ar.inference(pose3d_root)
+        actions, is_true = results
 
         end = time.time()
 
@@ -132,7 +133,8 @@ class ISBFSAR:
                             "edges": edges,
                             "fps": fps,
                             "focus": focus,
-                            "actions": results,
+                            "actions": actions,
+                            "is_true": is_true,
                             "distance": d * 2,  # TODO fix
                             "box": None
                             }
@@ -284,7 +286,7 @@ class ISBFSAR:
             data = data[list(range(0, len(data), int(len(data) / self.window_size)))]
 
         self.log("Success!")
-        data = (data, flag, requires_focus, requires_box)
+        data = (data, flag)
         self.ar.train(data)
 
     def save(self):

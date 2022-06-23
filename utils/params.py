@@ -5,12 +5,11 @@ engine_dir = "engines"
 print("Ubuntu: {}".format(ubuntu))
 
 seq_len = 16
-n_joints = 25
 
 
 class MainConfig(object):
     def __init__(self):
-        self.cam = "webcam"  # webcam or realsense
+        self.cam = "realsense"  # webcam or realsense
         self.cam_width = 640
         self.cam_height = 480
         self.window_size = seq_len
@@ -48,20 +47,24 @@ class TRXConfig(object):
         self.start_discriminator_after_epoch = -1
         self.first_mile = 15
         self.second_mile = 1500
-        # self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"
-        self.data_path = "D:/datasets/nturgbd_trx_skeletons" if not ubuntu else "../nturgbd_trx_skeletons"
+        self.model = "DISC"  # DISC or EXP
+        # CHOICE DATASET
+        self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"
+        self.n_joints = 30
+        # self.data_path = "D:/datasets/nturgbd_trx_skeletons_ALL" if not ubuntu else "../nturgbd_trx_skeletons_ALL"
+        # self.n_joints = 25
+        # END CHOICE DATASET
         self.n_workers = 2 if not ubuntu else 20
-        self.n_epochs = 10000
+        self.n_epochs = 1000
         self.log_every = 10 if not ubuntu else 1000
         self.trt_path = 'modules/ar/modules/{}/trx.engine'.format(engine_dir)
         self.trans_linear_in_dim = 256
         self.trans_linear_out_dim = 128
-        self.way = 5
+        self.way = 12
         self.shot = 1
         self.query_per_class = 1
         self.trans_dropout = 0.
         self.seq_len = seq_len
-        self.n_joints = n_joints
         self.num_gpus = 1
         self.temp_set = [2]
         self.device = 'cuda'

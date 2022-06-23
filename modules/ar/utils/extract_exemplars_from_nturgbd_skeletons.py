@@ -14,7 +14,7 @@ exemplars = ["S001C003P008R001A001",  # LAST WAS 1
              "S001C003P008R001A037",
              "S001C003P008R001A043",
              "S001C003P008R001A049",
-             # "S001C003P008R001A055",
+             "S001C003P008R001A055",
              "S018C003P008R001A061",
              "S018C003P008R001A067",
              "S018C003P008R001A073",
@@ -23,19 +23,19 @@ exemplars = ["S001C003P008R001A001",  # LAST WAS 1
              "S018C003P008R001A091",
              "S018C003P008R001A097",
              "S018C003P008R001A103",
-             # "S018C003P008R001A109",
-             # "S018C003P008R001A115"
+             "S018C003P008R001A109",
+             "S018C003P008R001A115"
              ]
 
 test_classes = ["A1", "A7", "A13", "A19", "A25", "A31", "A37", "A43", "A49",
-                # "A55",
+                "A55",
                 "A61", "A67", "A73", "A79", "A85",
                 "A91", "A97", "A103",
-                # "A109", "A115"
+                "A109", "A115"
                 ]
 
 exemplars = [elem + '.skeleton' for elem in exemplars]
-in_dataset_path = ["D:\\datasets\\nturgb+d_skeletons-1-17", "D:\\datasets\\nturgb+d_skeletons-18-32"]
+in_dataset_path = ["D:\\datasets\\useless\\nturgb+d_skeletons-1-17", "D:\\datasets\\useless\\nturgb+d_skeletons-18-32"]
 out_dataset_path = "D:\\datasets\\nturgbd_trx_skeletons_exemplars"
 classes_path = "assets/nturgbd_classes.txt"
 n = 16
@@ -75,11 +75,6 @@ if __name__ == "__main__":
     with open("assets/nturgbd_without_skeleton.txt", "r") as infile:
         missing_skeleton = infile.readlines()[3:]
 
-    # Count total number of files (we remove 10 classes over 60 because those involves two person)
-    total = 0
-    for path in in_dataset_path:
-        total += int(sum([len(files) for r, d, files in os.walk(path)]) * (1 - 16 / 60))
-
     # Get conversion class id -> class label
     with open(classes_path, "r", encoding='utf-8') as f:
         classes = f.readlines()
@@ -89,10 +84,6 @@ if __name__ == "__main__":
         name = name.strip().replace(" ", "_").replace("/", "-").replace("’", "")
         if index in test_classes:
             class_dict[index] = name
-    # two_person = ['A50', 'A51', 'A52', 'A53', 'A54', 'A55', 'A56', 'A57', 'A58', 'A59', 'A60', 'A106', 'A107', 'A108',
-    #               'A109', 'A110', 'A111', 'A112', 'A113', 'A114', 'A115', 'A116', 'A117', 'A118', 'A119', 'A120']
-    # for elem in two_person:
-    #     class_dict.pop(elem)
 
     # Create output directories ( and remove old one if presents)
     for value in list(class_dict.values()):
@@ -103,9 +94,6 @@ if __name__ == "__main__":
     for file in exemplars:
         # Retrieve class name (between A and _ es 'S001C001P001R001A001_rgb.avi'
         class_id = int(file.split("A")[-1].split(".")[0])  # take the integer of the class
-        if 50 <= class_id <= 60 or class_id >= 106:
-            # print("Skipping two person (by id)")
-            continue
         class_id = "A" + str(class_id)
         class_name = class_dict[class_id]
 
@@ -123,25 +111,37 @@ if __name__ == "__main__":
         assert lines is not None
 
         n_frame = int(lines[0].strip())
-        pose_sequence = []
+        pose_sequences = {}
         offset = 1
         for i in range(n_frame):
+
             body_count = int(lines[offset].strip())
+            offset += 1  # go to info line
 
-            # If there are two person, ignore this frame
-            if body_count != 1:
-                # print("Skipping frame (found 2 skeletons)")
-                continue
+            for k in range(body_count):
 
-            joint_count = int(lines[offset + 2].strip())
-            pose = []
-            for j in range(joint_count):
-                pose.append(lines[offset + 3 + j].strip().split(' ')[:3])
-            pose_sequence.append(pose)
-            offset += joint_count + 3
+                body_id = lines[offset].split()[0]
+                offset += 1  # go to joint number line
+                joint_count = int(lines[offset].strip())
+                offset += 1  # Advance to coordinates
 
+                pose = []
+                for _ in range(joint_count):
+                    pose.append(lines[offset].strip().split(' ')[:3])
+                    offset += 1  # Next line
+                if body_id in pose_sequences.keys():
+                    pose_sequences[body_id].append(pose)
+                else:
+                    pose_sequences[body_id] = list([pose])
+                # if body_count > 1:
+                #     offset -= 1  # Skip
+
+        if len(pose_sequences) == 0:
+            print("No skeleton found!")
+            continue
+        pose_sequence = pose_sequences[max(pose_sequences, key=lambda item: len(pose_sequences[item]))]
         if len(pose_sequence) < n:
-            # print("Skipping (not enough poses)")
+            print("Skipping (not enough poses)")
             continue
 
         # Select just n frames

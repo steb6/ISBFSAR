@@ -5,10 +5,8 @@ from torch.optim.lr_scheduler import MultiStepLR
 import wandb
 from tqdm import tqdm
 from modules.ar.utils.dataloader import MetrabsData
-# from modules.ar.utils.misc import aggregate_accuracy, loss_fn
-from modules.ar.utils.model import CNN_TRX
+from modules.ar.utils.model import Skeleton_TRX_EXP, Skeleton_TRX_Disc
 from utils.params import TRXConfig
-import random
 from utils.params import ubuntu
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_score
@@ -37,19 +35,26 @@ if __name__ == "__main__":
     args = TRXConfig()
     torch.manual_seed(0)
 
+    # Create checkpoints directory
     if not os.path.exists("checkpoints"):
         os.mkdir("checkpoints")
     checkpoints_path = "checkpoints" + os.sep + datetime.now().strftime("%d_%m_%Y-%H_%M")
     if not os.path.exists(checkpoints_path):
         os.mkdir(checkpoints_path)
 
-    model = CNN_TRX(args).cuda(device)
+    # Get right model
+    trx_model = None
+    if args.model == "DISC":
+        trx_model = Skeleton_TRX_Disc
+    elif args.model == "EXP":
+        trx_model = Skeleton_TRX_EXP
+    else:
+        raise Exception("NOT a valid model")
+    model = trx_model(args).cuda(device)
     model.train()
 
     # Create dataset iterator
-    train_data = MetrabsData(args.data_path, k=5, n_task=10000 if ubuntu else 100)
-    valid_data = MetrabsData(args.data_path, k=5, n_task=1000 if ubuntu else 10)
-    test_data = MetrabsData(args.data_path, k=5, n_task=1000)
+    train_data = MetrabsData(args.data_path, k=args.way, n_task=10000 if ubuntu else 100)
 
     # Divide dataset into train and validation
     classes = train_data.classes
@@ -59,18 +64,15 @@ if __name__ == "__main__":
         if elem in test_classes:  # DONT ADD IF THE ACTION IS PART OF SUPPORT SET
             continue
         class_id = int(inv_class_dict[elem][1:])
-        if 50 <= class_id <= 60 or class_id >= 106:  # DONT ADD IF ACTION INVOLVES TWO PERSON
-            continue
+        if "metrabs" in args.data_path:  # we dont have two actions for metrabs, but for NTURGBD yes
+            if 50 <= class_id <= 60 or class_id >= 106:  # DONT ADD IF ACTION INVOLVES TWO PERSON
+                continue
         filtered_classes.append(elem)
-    random.shuffle(filtered_classes)
-    n_train = int(len(filtered_classes) * 0.8)
-    train_data.classes = filtered_classes[:n_train]
-    valid_data.classes = filtered_classes[n_train:]
-    test_data.classes = test_classes
+    train_data.classes = filtered_classes
 
     # Create loaders
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, num_workers=args.n_workers)
-    valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.batch_size, num_workers=args.n_workers)
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, num_workers=args.n_workers,
+                                               shuffle=True)
 
     # Create optimizer and scheduler
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-2)
@@ -84,10 +86,10 @@ if __name__ == "__main__":
         wandb.watch(model, log='all', log_freq=args.log_every)
 
     # Log
-    print("Train samples: {}, valid samples: {}".format(len(train_loader), len(valid_loader)))
+    print("Train samples: {}".format(len(train_loader)))
     print("Training for {} epochs".format(args.n_epochs))
 
-    # Open set loss
+    # Losses
     os_loss_fn = torch.nn.BCELoss()
     fs_loss_fn = torch.nn.CrossEntropyLoss()
 
@@ -99,22 +101,16 @@ if __name__ == "__main__":
         os_train_pred = []
         os_train_true = []
 
-        fs_valid_losses = []
-        fs_valid_accuracies = []
-        os_valid_losses = []
-        os_valid_pred = []
-        os_valid_true = []
-
         # TRAIN
         model.train()
         torch.set_grad_enabled(True)
         for i, elem in enumerate(tqdm(train_loader)):
-            support_set, target_set, _, support_labels, target_label = elem
+            support_set, target_set, unknown_set, support_labels, target_label = elem
             batch_size = support_set.size(0)
 
             support_set = support_set.reshape(batch_size, args.way, args.seq_len, args.n_joints * 3).cuda().float()
             target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-            # unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
+            unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
             support_labels = support_labels.reshape(batch_size, args.way).cuda().int()
             target_label = target_label.cuda()
 
@@ -139,35 +135,35 @@ if __name__ == "__main__":
                 # OS known (target depends on true class)
                 os_pred = out['is_true']
                 target = torch.eq(torch.argmax(fs_pred, dim=1), target_label).float().unsqueeze(-1)
-
+                # Train only on correct prediction
                 true_s = (target == 1.).nonzero(as_tuple=True)[0]
-                false_s = (target == 0.).nonzero(as_tuple=True)[0]
-                n = min(len(true_s), len(false_s))
-                true_s = true_s[:n]
-                false_s = false_s[:n]
-                os_pred = os_pred[torch.cat((true_s, false_s))]
-                target = target[torch.cat((true_s, false_s))]
+                n = len(true_s)
+                os_pred = os_pred[true_s]
+                target = target[true_s]
 
                 known_os_loss = os_loss_fn(os_pred, target)
                 os_train_true.append(target.cpu().numpy())
                 os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
                 os_train_losses.append(known_os_loss.item())
 
-                # ##################
-                # # Unknown action #
-                # ##################
-                # out = model(support_set, support_labels, unknown_set)
-                #
-                # # OS unknown
-                # os_pred = out['is_true']
-                # target = torch.zeros_like(os_pred)
-                # unknown_os_loss = os_loss_fn(os_pred.squeeze(), target)
-                #
-                # os_train_losses.append(unknown_os_loss.item())
-                # os_train_true.append(target.cpu().numpy())
-                # os_train_pred.append((os_pred > 0.5).float())
+                ##################
+                # Unknown action #
+                ##################
+                out = model(support_set, support_labels, unknown_set)
 
-                final_loss = final_loss + known_os_loss  # + unknown_os_loss
+                # OS unknown
+                os_pred = out['is_true']
+                target = torch.zeros_like(os_pred)
+                # Get n samples
+                os_pred = os_pred[:n]
+                target = target[:n]
+
+                unknown_os_loss = os_loss_fn(os_pred, target)
+                os_train_losses.append(unknown_os_loss.item())
+                os_train_true.append(target.cpu().numpy())
+                os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
+
+                final_loss = final_loss + known_os_loss + unknown_os_loss
             ############
             # Optimize #
             ############
@@ -178,73 +174,10 @@ if __name__ == "__main__":
                 optimizer.zero_grad()
 
         scheduler.step()
-        # EVAL
-        model.eval()
-        torch.set_grad_enabled(False)
-        for i, elem in enumerate(tqdm(valid_loader)):
-            support_set, target_set, _, support_labels, target_label = elem
-            batch_size = support_set.size(0)
-
-            support_set = support_set.reshape(batch_size, args.way, args.seq_len, args.n_joints * 3).cuda().float()
-            target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-            # unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-            support_labels = support_labels.reshape(batch_size, args.way).cuda().int()
-            target_label = target_label.cuda()
-
-            ################
-            # Known action #
-            ################
-            out = model(support_set, support_labels, target_set)
-
-            # FS known
-            fs_pred = out['logits']
-            target = torch.zeros_like(fs_pred)
-            target[torch.arange(batch_size), target_label.long()] = 1
-            scores = fs_pred
-            known_fs_loss = fs_loss_fn(scores, target)
-            fs_valid_losses.append(known_fs_loss.item())
-            final_loss = known_fs_loss
-
-            valid_accuracy = torch.eq(torch.argmax(scores, dim=1), target_label).int().float().mean().item()
-            fs_valid_accuracies.append(valid_accuracy)
-
-            if epoch > args.start_discriminator_after_epoch:
-                # OS known (target depends on true class)
-                os_pred = out['is_true']
-                target = torch.eq(torch.argmax(fs_pred, dim=1), target_label).float().unsqueeze(-1)
-
-                true_s = (target == 1.).nonzero(as_tuple=True)[0]
-                false_s = (target == 0.).nonzero(as_tuple=True)[0]
-                n = min(len(true_s), len(false_s))
-                true_s = true_s[:n]
-                false_s = false_s[:n]
-                os_pred = os_pred[torch.cat((true_s, false_s))]
-                target = target[torch.cat((true_s, false_s))]
-
-                known_os_loss = os_loss_fn(os_pred, target)
-                os_valid_true.append(target.cpu().numpy())
-                os_valid_pred.append((os_pred > 0.5).float().cpu().numpy())
-                os_valid_losses.append(known_os_loss.item())
-
-                # ##################
-                # # Unknown action #
-                # ##################
-                # out = model(support_set, support_labels, unknown_set)
-                #
-                # # OS unknown
-                # os_pred = out['is_true']
-                # target = torch.zeros_like(os_pred)
-                # unknown_os_loss = os_loss_fn(os_pred.squeeze(), target)
-                #
-                # os_valid_losses.append(unknown_os_loss.item())
-                # os_valid_true.append(target.cpu().numpy())
-                # os_valid_pred.append((os_pred > 0.5).float())
 
         # WANDB
         os_train_true = np.concatenate(os_train_true, axis=None) if len(os_train_true) > 0 else np.zeros(1)
         os_train_pred = np.concatenate(os_train_pred, axis=None) if len(os_train_pred) > 0 else np.zeros(1)
-        os_valid_true = np.concatenate(os_valid_true, axis=None) if len(os_valid_true) > 0 else np.zeros(1)
-        os_valid_pred = np.concatenate(os_valid_pred, axis=None) if len(os_valid_pred) > 0 else np.zeros(1)
         epoch_path = checkpoints_path + os.sep + '{}.pth'.format(epoch)
         if ubuntu:
             wandb.log({"train/fs_loss": sum(fs_train_losses) / len(fs_train_losses),
@@ -256,24 +189,11 @@ if __name__ == "__main__":
                        "train/os_f1": f1_score(os_train_true, os_train_pred, zero_division=0),
                        "train/os_n_1_true": os_train_true.mean(),
                        "train/os_n_1_pred": os_train_pred.mean(),
-
-                       "valid/fs_loss": sum(fs_valid_losses) / len(fs_valid_losses),
-                       "valid/fs_accuracy": sum(fs_valid_accuracies) / len(fs_valid_accuracies),
-                       "valid/os_loss": (sum(os_valid_losses) / len(os_valid_losses)) if len(os_valid_losses) > 0 else 0,
-                       "valid/os_accuracy": accuracy_score(os_valid_true, os_valid_pred),
-                       "valid/os_precision": precision_score(os_valid_true, os_valid_pred, zero_division=0),
-                       "valid/os_recall": recall_score(os_valid_true, os_valid_pred, zero_division=0),
-                       "valid/os_f1": f1_score(os_valid_true, os_valid_pred, zero_division=0),
-                       "valid/os_n_1_true": os_valid_true.mean(),
-                       "valid/os_n_1_pred": os_valid_pred.mean(),
-
                        "lr": optimizer.param_groups[0]['lr']})
 
         torch.save({'epoch': epoch,
                     'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'fs_accuracy': sum(fs_valid_accuracies) / len(fs_valid_accuracies),
-                    'os_accuracy': f1_score(os_valid_true, os_valid_pred, zero_division=0)},
+                    'optimizer_state_dict': optimizer.state_dict()},
                    epoch_path)
 
     if ubuntu:

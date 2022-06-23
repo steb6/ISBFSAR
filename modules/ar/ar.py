@@ -1,7 +1,9 @@
 import pickle
 import numpy as np
+from modules.ar.utils.model import Skeleton_TRX_Disc as CNN_TRX
 from utils.params import TRXConfig
-from utils.tensorrt_runner import Runner
+# from utils.tensorrt_runner import Runner
+import torch
 from tqdm import tqdm
 import copy
 
@@ -10,9 +12,14 @@ class ActionRecognizer:
     def __init__(self, args):
         self.device = args.device
 
-        self.ar = Runner(args.trt_path)
+        # self.ar = Runner(args.trt_path)
+        self.ar = CNN_TRX(TRXConfig())
+        self.ar.load_state_dict(torch.load('modules/ar/modules/raws/DISC.pth',
+                                           map_location=torch.device(0))['model_state_dict'])
+        self.ar.cuda()
+        self.ar.eval()
 
-        self.support_set = np.zeros((args.way, args.seq_len, args.n_joints * 3), dtype=float)
+        self.support_set = torch.zeros((args.way, args.seq_len, args.n_joints * 3)).float()
         self.previous_frames = []
         self.support_labels = []
         self.seq_len = args.seq_len
@@ -25,77 +32,38 @@ class ActionRecognizer:
 
     def inference(self, pose):
         if pose is None:
-            return {}
+            return {}, 0
 
         if len(self.support_labels) == 0:  # no class to predict
-            return {}
+            return {}, 0
 
-        pose = pose.reshape(-1)
+        pose = torch.FloatTensor(pose.reshape(-1)).cuda()
 
         self.previous_frames.append(pose)
         if len(self.previous_frames) < self.seq_len:  # few samples
-            return {}
+            return {}, 0
         elif len(self.previous_frames) == self.seq_len + 1:
             self.previous_frames = self.previous_frames[1:]  # add as last frame
 
-        if len(self.similar_actions) == 0:  # CASE NO SIMILAR ACTION
-            # Predict actual action
-            poses = np.stack(self.previous_frames).reshape(self.seq_len, -1).astype(np.float32)
-            labels = np.array(list(range(self.way)))
-            ss = self.support_set.reshape(-1, 90).astype(np.float32)
-            outputs = self.ar([ss, labels, poses])
-            outputs = outputs[0].reshape(1, 5)
+        # Predict actual action
+        poses = torch.stack(self.previous_frames).unsqueeze(0).cuda()
+        labels = torch.IntTensor(list(range(self.way))).unsqueeze(0).cuda()
+        with torch.no_grad():
+            ss = self.support_set.unsqueeze(0).cuda()
+        outputs = self.ar(ss, labels, poses)
 
-            # Softmax
-            max_along_axis = outputs.max(axis=1, keepdims=True)
-            exponential = np.exp(outputs - max_along_axis)
-            denominator = np.sum(exponential, axis=1, keepdims=True)
-            predicted = exponential / denominator
-            predicted = predicted[0]
+        # Softmax
+        few_shot_result = torch.softmax(outputs['logits'].squeeze(0), dim=0).detach().cpu().numpy()
+        open_set_result = outputs['is_true'].squeeze(0).detach().cpu().numpy()
 
-            results = {}  # return output as dictionary
-            predicted = predicted[:len(self.support_labels)]
-            for k in range(len(predicted)):
-                if k < len(self.support_labels):
-                    results[self.support_labels[k]] = (predicted[k], self.requires_focus[k], self.requires_box[k])
-                else:
-                    results['Action_{}'.format(k)] = (predicted[k], self.requires_focus[k], self.requires_box[k])
-            return results
-        else:
-            to_combine = []
-            for actions in self.similar_actions:  # CASE SIMILAR ACTIONS
-                for action in actions:
-                    # Predict actual action
-                    poses = np.stack(self.previous_frames).reshape(self.seq_len, -1).astype(np.float32)
-                    labels = np.array(list(range(self.way)))
-                    ss = copy.deepcopy(self.support_set)
-                    ss[self.support_labels.index(action)] = np.zeros_like(ss[self.support_labels.index(action)])
-                    ss = ss.reshape(-1, 90).astype(np.float32)
-                    outputs = self.ar([ss, labels, poses])
-                    outputs = outputs[0].reshape(1, 5)
-
-                    # Softmax
-                    max_along_axis = outputs.max(axis=1, keepdims=True)
-                    exponential = np.exp(outputs - max_along_axis)
-                    denominator = np.sum(exponential, axis=1, keepdims=True)
-                    predicted = exponential / denominator
-                    predicted = predicted[0]
-
-                    results = {}  # return output as dictionary
-                    predicted = predicted[:len(self.support_labels)]
-                    for k in range(len(predicted)):
-                        if k < len(self.support_labels):
-                            results[self.support_labels[k]] = (predicted[k], self.requires_focus[k], self.requires_box[k])
-                        else:
-                            results['Action_{}'.format(k)] = (predicted[k], self.requires_focus[k], self.requires_box[k])
-                    to_combine.append(results)
-                # TODO COMBINE RESULTS (DOES NOT WORK)
-                combined = copy.deepcopy(to_combine[0])
-                for key in self.support_labels:
-                    combined[key] = tuple([sum(x[key][0] for x in to_combine) / 2, combined[key][1], combined[key][2]])
-                combined[actions[0]] = tuple([to_combine[1][actions[0]][0], combined[actions[0]][1], combined[actions[0]][2]])
-                combined[actions[1]] = tuple([to_combine[0][actions[1]][0], combined[actions[1]][1], combined[actions[1]][2]])
-            return combined
+        results = {}  # return output as dictionary
+        predicted = few_shot_result[:len(self.support_labels)]
+        for k in range(len(predicted)):
+            if k < len(self.support_labels):
+                results[self.support_labels[k]] = (predicted[k])
+            else:
+                results['Action_{}'.format(k)] = (predicted[k])
+        return results, open_set_result
 
     def sim(self, action1, action2):
         self.similar_actions.append((action1, action2))
@@ -106,7 +74,7 @@ class ActionRecognizer:
         """
         index = self.support_labels.index(flag)
         self.support_labels.remove(flag)
-        self.support_set[index] = np.zeros_like(self.support_set[index])
+        self.support_set[index] = torch.zeros_like(self.support_set[index])
         self.requires_focus[index] = False
 
     def debug(self):
@@ -123,18 +91,16 @@ class ActionRecognizer:
         """
         if raw is not None:  # if some data are given
             # Convert raw
-            x = raw[0].reshape(self.seq_len, -1)
+            x = torch.FloatTensor(raw[0].reshape(self.seq_len, -1)).cuda()
             if raw[1] not in self.support_labels and len(self.support_labels) < 5:
                 self.support_labels.append(raw[1])
-            y = np.array([int(self.support_labels.index(raw[1]))])
-            self.support_set[y.item()] = x
-            self.requires_focus[y.item()] = raw[2]
-            self.requires_box[y.item()] = raw[3]
+            y = int(self.support_labels.index(raw[1]))
+            self.support_set[y] = x
 
 
 if __name__ == "__main__":
     ar = ActionRecognizer(TRXConfig())
     for _ in range(5):
-        ar.train((np.random.random((16, 30, 3)), "test", True, False))
+        ar.train((np.random.rand(16, 90), "test{}".format(_)))
     for _ in tqdm(range(100000)):
-        ar.inference(np.random.random((30, 3)))
+        ar.inference(np.random.rand(90))

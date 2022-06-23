@@ -76,6 +76,9 @@ class VISPYVisualizer:
         self.b2.add(self.focus)
         self.fps = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
                         font_size=12, pos=(0.75, 0.9))
+        self.is_same_action = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
+                                   font_size=12, pos=(0.25, 0.7))
+        self.b2.add(self.is_same_action)
         self.b2.add(self.fps)
         self.actions = {}
 
@@ -92,7 +95,8 @@ class VISPYVisualizer:
         b4.camera = scene.PanZoomCamera(rect=(0, 0, 1, 1))
         b4.camera.interactive = False
         b4.border_color = (0.5, 0.5, 0.5, 1)
-        self.desc_add = Text('ADD ACTION: add action_name [-focus][-box/nobox]', color='white', rotation=0, anchor_x="left",
+        self.desc_add = Text('ADD ACTION: add action_name [-focus][-box/nobox]', color='white', rotation=0,
+                             anchor_x="left",
                              anchor_y="bottom",
                              font_size=12, pos=(0.1, 0.9))
         self.desc_remove = Text('REMOVE ACTION: remove action_name', color='white', rotation=0, anchor_x="left",
@@ -128,6 +132,7 @@ class VISPYVisualizer:
             focus = elements["focus"]
             fps = elements["fps"]
             results = elements["actions"]
+            is_true = elements["is_true"]
             distance = elements["distance"]
             box = elements["box"]
 
@@ -155,7 +160,9 @@ class VISPYVisualizer:
 
             # m = max([_[0] for _ in results.values()]) if len(results) > 0 else 0  # Just max
             for i, r in enumerate(results.keys()):
-                score, requires_focus, requires_box = results[r]
+                score = results[r]
+                requires_box = False
+                requires_focus = False
                 # Check if conditions are satisfied
                 # if score == m:  # Just max
                 if score > 0.5:
@@ -181,6 +188,8 @@ class VISPYVisualizer:
                     self.b2.add(self.actions[r])
                 self.actions[r].pos = 0.5, 0.7 - (0.1 * i)
                 self.actions[r].color = color
+                self.is_same_action.text = "{:.2f}".format(float(is_true))
+                self.is_same_action.color = 'red' if float(is_true) < 0.75 else 'green'
 
             # Remove erased action (if any)
             to_remove = []
