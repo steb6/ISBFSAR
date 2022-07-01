@@ -137,13 +137,14 @@ class VISPYVisualizer:
             box = elements["box"]
 
             # POSE
-            theta = 90
-            R = np.matrix([[1, 0, 0],
-                           [0, math.cos(theta), -math.sin(theta)],
-                           [0, math.sin(theta), math.cos(theta)]])
-            pose = pose @ R
-            for i, edge in enumerate(edges):
-                self.lines[i].set_data((pose[[edge[0], edge[1]]]))
+            if pose is not None:
+                theta = 90
+                R = np.matrix([[1, 0, 0],
+                               [0, math.cos(theta), -math.sin(theta)],
+                               [0, math.sin(theta), math.cos(theta)]])
+                pose = pose @ R
+                for i, edge in enumerate(edges):
+                    self.lines[i].set_data((pose[[edge[0], edge[1]]]))
 
             # IMAGE
             self.image.set_data(img)
@@ -156,7 +157,7 @@ class VISPYVisualizer:
                 self.focus.text = "NOT FOCUS"
                 self.focus.color = "red"
             self.fps.text = "FPS: {:.2f}".format(fps)
-            self.distance.text = "DIST: {:.2f}m".format(distance)
+            self.distance.text = "DIST: {:.2f}m".format(distance) if distance is not None else "DIST:"
 
             # m = max([_[0] for _ in results.values()]) if len(results) > 0 else 0  # Just max
             for i, r in enumerate(results.keys()):

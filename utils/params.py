@@ -48,7 +48,9 @@ class TRXConfig(object):
         self.first_mile = 15
         self.second_mile = 1500
         self.model = "DISC"  # DISC or EXP
+        self.final_ckpt_path = "modules/ar/modules/raws/DISC.pth"
         # CHOICE DATASET
+        self.exemplars_path = "D:\\datasets\\metrabs_trx_skeletons_exemplars" if not ubuntu else "../metrabs_trx_skeletons_exemplars"
         self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"
         self.n_joints = 30
         # self.data_path = "D:/datasets/nturgbd_trx_skeletons_ALL" if not ubuntu else "../nturgbd_trx_skeletons_ALL"

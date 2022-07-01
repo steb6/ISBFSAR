@@ -14,7 +14,7 @@ class ActionRecognizer:
 
         # self.ar = Runner(args.trt_path)
         self.ar = CNN_TRX(TRXConfig())
-        self.ar.load_state_dict(torch.load('modules/ar/modules/raws/DISC.pth',
+        self.ar.load_state_dict(torch.load(args.final_ckpt_path,
                                            map_location=torch.device(0))['model_state_dict'])
         self.ar.cuda()
         self.ar.eval()

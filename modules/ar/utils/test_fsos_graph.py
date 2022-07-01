@@ -33,6 +33,7 @@ for c in classes:
 test_classes = [class_dict[elem] for elem in test_classes]
 
 if __name__ == "__main__":
+    print("BAU")
     args = TRXConfig()
 
     for model_type in ["DISC", "EXP", "DISC-NO-OS"]:
@@ -58,7 +59,7 @@ if __name__ == "__main__":
         torch.set_grad_enabled(False)
 
         # Gor each K
-        for K in tqdm(list(range(5, 16))):
+        for K in tqdm(list(range(5, 17))):
 
             results[model_type]["FSOS-ACC"].append([])
             results[model_type]["FS-ACC"].append([])
@@ -71,9 +72,9 @@ if __name__ == "__main__":
                 support_classes = random.sample(range(0, len(test_classes)), K)
                 support_classes = [test_classes[elem] for elem in support_classes]
                 os_classes = [item for item in test_classes if item not in support_classes]
-                test_data = TestMetrabsData(args.data_path, "D:\\datasets\\metrabs_trx_skeletons_exemplars",
+                test_data = TestMetrabsData(args.data_path, args.exemplars_path,
                                             support_classes, os_classes)
-                test_loader = torch.utils.data.DataLoader(test_data, batch_size=32, num_workers=12)
+                test_loader = torch.utils.data.DataLoader(test_data, batch_size=32, num_workers=1)
 
                 # vis = MPLPosePrinter()
 
@@ -82,7 +83,7 @@ if __name__ == "__main__":
                 targets = []
 
                 for elem in test_loader:
-                    support_set, target_set, _, support_labels, target_label = elem
+                    support_set, target_set, _, support_labels, target_label, _, _, _ = elem
                     batch_size = support_set.size(0)
 
                     support_set = support_set.reshape(batch_size, K, args.seq_len, args.n_joints * 3).cuda().float()
@@ -150,5 +151,5 @@ if __name__ == "__main__":
                 results[model_type]["OS-ACC"][K-5].append(os_acc)
                 results[model_type]["OS-F1"][K - 5].append(f1)
 
-    with open("RESULTS", "wb") as f:
+    with open("RESULTS100", "wb") as f:
         pickle.dump(results, f)

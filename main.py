@@ -120,25 +120,25 @@ class ISBFSAR:
         fps = sum(fps_s) / len(fps_s)
 
         if self.visualizer:
-            if pose3d_abs is not None:
+            if bbox is not None:
                 # Print bbox
                 x1, x2, y1, y2 = bbox
                 img = cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
-                # Send to visualizer
-                img = cv2.flip(img, 0)
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                elements = {"img": img,
-                            "pose": pose3d_root,
-                            "edges": edges,
-                            "fps": fps,
-                            "focus": focus,
-                            "actions": actions,
-                            "is_true": is_true,
-                            "distance": d * 2,  # TODO fix
-                            "box": None
-                            }
-                self.output_queue.put((elements,))
+            # Send to visualizer
+            img = cv2.flip(img, 0)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            elements = {"img": img,
+                        "pose": pose3d_root,
+                        "edges": edges,
+                        "fps": fps,
+                        "focus": focus,
+                        "actions": actions,
+                        "is_true": is_true,
+                        "distance": d * 2 if d is not None else None,
+                        "box": None
+                        }
+            self.output_queue.put((elements,))
 
         return img, pose3d_root, results
 
@@ -182,12 +182,31 @@ class ISBFSAR:
             elif msg[0] == "sim":
                 self.sim(msg[1], msg[2])
 
+            elif msg[0] == "test_dir":  # TODO REMOVE DEBUG
+                self.test_dir(msg[1])  # TODO REMOVE DEBUG
+
             else:
                 self.log("Not a valid command!")
 
         # clean  # TODO TERMINATE THREADS
         self.input_proc.join()
         self.output_proc.join()
+
+    # TODO REMOVE DEBUG
+    def test_dir(self, path):
+        poses = []
+        for i in range(16):
+            img = cv2.imread(os.path.join(path, "img_{}.png".format(i)))
+            _, pose, _ = self.get_frame(img)
+            poses.append(pose)
+
+        poses = np.stack(poses)
+        for pose in poses:
+            results = self.ar.inference(pose)
+            actions, is_true = results
+            print(actions)
+            print(is_true)
+    # TODO END REMOVE DEBUG
 
     def test_video(self, path):
         if not os.path.exists(path):
@@ -239,9 +258,11 @@ class ISBFSAR:
             self.log("GO!")
             playsound('assets' + os.sep + 'start.wav')
             poses = []
+            imgs = []  # TODO REMOVE DEBUG
             i = 0
             while len(poses) < self.window_size:
-                _, pose, _ = self.get_frame()
+                img, pose, _ = self.get_frame()
+                imgs.append(img)  # TODO REMOVE DEBUG
                 if pose is not None:
                     poses.append(pose)
                 self.log("{:.2f}%".format((i / (self.window_size - 1)) * 100))
@@ -285,6 +306,25 @@ class ISBFSAR:
             data = data[:(len(data) - (len(data) % self.window_size))]
             data = data[list(range(0, len(data), int(len(data) / self.window_size)))]
 
+        # TODO SAVE POSE AND
+        import pickle
+        out_dir = "testing"
+        skeleton = 'smpl+head_30'
+        with open('assets/skeleton_types.pkl', "rb") as input_file:
+            skeleton_types = pickle.load(input_file)
+        edges = skeleton_types[skeleton]['edges']
+        from utils.matplotlib_visualizer import MPLPosePrinter
+        vis = MPLPosePrinter()
+        os.mkdir(os.path.join("imgs", flag))
+        for i, img in enumerate(imgs):
+            img = img[::-1, :, ::-1]
+            cv2.imwrite(os.path.join("imgs", flag, f"img_{i}.png"), img)
+        for j, pose in enumerate(poses):
+            vis.clear()
+            vis.print_pose(pose.reshape(-1, 3), edges)
+            vis.save(os.path.join("imgs", flag, f"pose_{j}.png"))
+            vis.sleep(0.01)
+        # TODO END
         self.log("Success!")
         data = (data, flag)
         self.ar.train(data)

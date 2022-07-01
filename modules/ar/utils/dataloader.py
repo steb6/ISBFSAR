@@ -52,7 +52,7 @@ class TestMetrabsData(data.Dataset):
         exemplars_files = [os.path.join(exemplars_path, elem) for elem in self.exemplars_classes]
         self.exemplars_poses = []
         for example in exemplars_files:
-            with open(example+'\\0.pkl', 'rb') as file:
+            with open(os.path.join(example,'0.pkl'), 'rb') as file:
                 elem = pickle.load(file)
             self.exemplars_poses.append(elem)
         self.exemplars_poses = np.stack(self.exemplars_poses)

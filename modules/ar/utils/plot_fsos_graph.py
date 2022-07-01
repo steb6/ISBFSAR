@@ -2,10 +2,10 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pickle
 
-with open("my_data_RESULTS2", "rb") as f:
+with open("RESULTS100", "rb") as f:
     results = pickle.load(f)
 
-metric = "FS-ACC"
+metric = "OS-F1"  # OS-ACC FSOS-ACC OS-F1
 
 # Data
 disc_accs = np.array(results["DISC"][metric])
@@ -20,7 +20,7 @@ discnoos_accs = np.array(results["DISC-NO-OS"][metric])
 discnoos_cfs = np.std(discnoos_accs, axis=1)
 discnoos_accs = discnoos_accs.mean(axis=1)
 
-ks = np.linspace(5, 15, 11)
+ks = np.linspace(5, 16, 12)
 
 # Plot
 fig, ax = plt.subplots()
@@ -36,6 +36,6 @@ ax.fill_between(ks, (discnoos_accs-discnoos_cfs), (discnoos_accs+discnoos_cfs), 
 
 # Show
 plt.xlabel("K - dimension of support set")
-plt.ylabel("FS accuracy")
+plt.ylabel("FSOS accuracy")
 plt.legend()
 plt.show()

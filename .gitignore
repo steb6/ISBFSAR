@@ -33,3 +33,7 @@ modules/focus/gaze_estimation/modules
 modules/focus/mutual_gaze/focus_detection/0.98.pth
 modules/focus/mutual_gaze/head_detection/epoch_0.pth
 modules/focus/gaze_estimation/pytorch_mpiigaze_demo
+
+imgs
+FSOS-ACC6.png
+RESULTS100
