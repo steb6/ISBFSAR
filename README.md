@@ -1,6 +1,6 @@
 # Interactive Skeleton Based Few Shot Action Recognition
 This repository contains a fast implementation of a 3d truncation robust [human pose estimator module](https://github.com/isarandi/metrabs), a fast [few shot action recognition module](https://github.com/tobyperrett/trx) and a CLI to add, remove or modify new action.
-If you are interested in the human pose estimator module take a look at [hpe](modules/hpe), if you are interested in the action recognition module take a look at [trx](modules/ar/trx).
+If you are interested in the human pose estimator module take a look at [hpe](modules/hpe), if you are interested in the action recognition module take a look at [ar](modules/ar).
 
 ## Create environment
 Create a Conda environment and install the following packages:
