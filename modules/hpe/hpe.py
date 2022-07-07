@@ -1,12 +1,10 @@
 import copy
-import cv2
 import pickle
 from modules.hpe.utils.misc import postprocess_yolo_output, homography, get_augmentations, is_within_fov, reconstruct_absolute
 import einops
 import numpy as np
 from utils.input import RealSense
 from utils.tensorrt_runner import Runner
-import time
 
 
 class HumanPoseEstimator:

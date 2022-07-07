@@ -3,41 +3,56 @@ import pickle
 import torch.utils.data as data
 import random
 import numpy as np
+from torchvision.transforms import transforms
+import cv2
 
 
 # https://rose1.ntu.edu.sg/dataset/actionRecognition/
 
 
-class MetrabsData(data.Dataset):
-    def __init__(self, path, k=5, n_task=10000, return_true_class_index=False):
+class EpisodicLoader(data.Dataset):
+    def __init__(self, path, k=5, n_task=10000, input_type="skeleton"):
         self.n_task = n_task
         self.path = path
         self.k = k
         self.classes = next(os.walk(self.path))[1]  # Get list of directories
-        self.return_true_class_index = return_true_class_index
+        self.input_type = input_type
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])
 
-    def get_random_video(self, id):
-        sequences = next(os.walk(os.path.join(self.path, self.classes[id])))[2]
-        path = random.sample(sequences, 1)[0]
-        path = os.path.join(self.path, self.classes[id], path)
-        with open(path, 'rb') as file:
-            elem = pickle.load(file)
-        return elem
+    def get_random_sample(self, class_name, input_type):
+        sequences = next(os.walk(os.path.join(self.path, class_name)))[2]  # Get list of files
+        path = random.sample(sequences, 1)[0]  # Get random file
+        path = os.path.join(self.path, class_name, path)  # Create full path
+        sample = None
 
-    def __getitem__(self, idx):  # Must return complete, imp_x and impl_y
-        support_classes = random.sample(range(0, len(self.classes)), self.k)
-        target_class = np.array(random.sample(support_classes, 1)[0])
+        if input_type == "skeleton":
+            with open(path, 'rb') as file:
+                sample = pickle.load(file)
+        if input_type == "rgb":
+            imgs = []
+            for elem in os.listdir(path):
+                elem = cv2.imread(elem)
+                elem = self.normalize(elem)
+                imgs.append(elem)
+            sample = imgs
+        return sample
 
-        support_set = np.array([self.get_random_video(cl) for cl in support_classes])
-        target_set = self.get_random_video(target_class)
-        unknown_set = self.get_random_video(random.sample(list(np.delete(np.array(list(range(len(self.classes)))),
-                                                                         support_classes)), 1)[0])
+    def __getitem__(self, _):  # Must return complete, imp_x and impl_y
+        support_classes = random.sample(self.classes, self.k)
+        target_class = random.sample(support_classes, 1)[0]
+        unknown_class = random.sample([x for x in self.classes if x not in support_classes], 1)[0]
 
-        if self.return_true_class_index:  # To print the name of the action
-            return support_set, target_set, np.array(support_classes), target_class
-        else:  # To train the model
-            return support_set, target_set, unknown_set,\
-                   np.array(range(0, self.k)), np.array(support_classes.index(target_class))
+        support_set = [self.get_random_sample(cl, self.input_type) for cl in support_classes]
+        target_set = self.get_random_sample(target_class, self.input_type)
+        unknown_set = self.get_random_sample(unknown_class, self.input_type)
+
+        return {'support_set': np.array(support_set),
+                'target_set': np.array(target_set),
+                'unknown_set': np.array(unknown_set),
+                'support_classes': support_classes,
+                'target_class': target_class,
+                'unknown_class': unknown_class}
 
     def __len__(self):
         return self.n_task
@@ -99,5 +114,3 @@ class TestMetrabsData(data.Dataset):
 
     def __len__(self):
         return len(self.target_set)
-
-

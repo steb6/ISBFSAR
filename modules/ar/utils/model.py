@@ -3,14 +3,12 @@ import torch
 from torch import nn
 from itertools import combinations
 from torch.autograd import Variable
-
+from torchvision.models import resnet50
 
 NUM_SAMPLES = 1
 
 
 class PositionalEncoding(nn.Module):
-    "Implement the PE function."
-
     def __init__(self, d_model, dropout, max_len=5000, pe_scale_factor=0.1):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
@@ -174,28 +172,9 @@ class MLP(torch.nn.Module):
         return output
 
 
-class DiscriminatorNaive(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(DiscriminatorNaive, self).__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.output_size = output_size
-        self.fc1 = torch.nn.Linear(self.input_size, self.hidden_size)
-        self.relu1 = torch.nn.ReLU()
-        self.fc2 = torch.nn.Linear(self.hidden_size, self.output_size)
-        self.out = torch.nn.Sigmoid()
-
-    def forward(self, x):
-        hidden = self.fc1(x)
-        relu = self.relu1(hidden)
-        output = self.fc2(relu)
-        out = self.out(output)
-        return out
-
-
-class DiscriminatorReductor(torch.nn.Module):
+class Discriminator(torch.nn.Module):
     def __init__(self, seq_len=120, dim=128):
-        super(DiscriminatorReductor, self).__init__()
+        super(Discriminator, self).__init__()
         self.dimensionality_reduction = torch.nn.Linear(dim, 16)
         self.fc1 = torch.nn.Linear(seq_len*16, 256)
         self.relu1 = torch.nn.ReLU()
@@ -217,63 +196,40 @@ class DiscriminatorReductor(torch.nn.Module):
         return y
 
 
-class Skeleton_TRX_Disc(nn.Module):
-    """
-    Standard Resnet connected to a Temporal Cross Transformer.
-
-    """
-
+class TRXOS(nn.Module):
     def __init__(self, args):
-        super(Skeleton_TRX_Disc, self).__init__()
-
-        self.train()
+        super(TRXOS, self).__init__()
         self.args = args
 
         self.trans_linear_in_dim = args.trans_linear_in_dim
-        self.features_extractor = MLP(self.args.n_joints * 3,
-                                      self.args.n_joints * 3 * 2, self.trans_linear_in_dim)
+        if args.input_type == "skeleton":
+            self.features_extractor = MLP(args.n_joints * 3,
+                                          args.n_joints * 3 * 2, self.trans_linear_in_dim)
+        if args.input_type == "rgb":
+            self.features_extractor = resnet50(pretrained=True)
 
         self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s) for s in args.temp_set])
-        self.discriminator = DiscriminatorReductor()
+
+        self.model = args.model
+        if self.model == "DISC":
+            self.discriminator = Discriminator()
+        if self.model == "EXP":
+            self.discriminator = torch.exp
 
     def forward(self, context_images, context_labels, target_images):
         batch_size = context_images.size(0)
         context_features = self.features_extractor(context_images)
         target_features = self.features_extractor(target_images)
 
-        # dim = self.trans_linear_in_dim
-        #
-        # context_features = context_features.reshape(-1, self.args.seq_len, dim)
-        # target_features = target_features.reshape(-1, self.args.seq_len, dim)
-        # TODO NEW  # 40 16 256,       8, 5          8, 16, 256
         target_features = target_features.unsqueeze(1)
         out = self.transformers[0](context_features, context_labels, target_features)
         all_logits = out['logits']
-        # TODO OLD
-        # all_logits = [t(context_features, context_labels, target_features)['logits'] for t in self.transformers]
-        # TODO END
-        # all_logits = torch.stack(all_logits, dim=-1)
 
-        # sample_logits = all_logits
-
-        # sample_logits = torch.mean(sample_logits, dim=2)
-
-        # TODO open set
         chosen_index = torch.argmax(all_logits, dim=1)
-        # TODO BEFORE
-        # prototypes = out['prototypes']
-        # mh_queries_vs = out['mh_queries_vs']
-        # chosen_prototype = prototypes[torch.arange(batch_size), chosen_index.squeeze()].unsqueeze(1)
-        #
-        # feature = mh_queries_vs - chosen_prototype
-        # TODO NOW
         feature = out['diffs'][torch.arange(batch_size), chosen_index, ...]
-        # TODO END
-        # feature = torch.cat((mh_queries_vs, chosen_prototype), dim=-1).mean(dim=-2).squeeze(1)
         decision = self.discriminator(feature)
 
-        return_dict = {'logits': all_logits, 'is_true': decision}
-        return return_dict
+        return {'logits': all_logits, 'is_true': decision}
 
     def distribute_model(self):
         """
@@ -283,49 +239,12 @@ class Skeleton_TRX_Disc(nn.Module):
         if self.args.num_gpus > 1:
             self.resnet.cuda(0)
             self.resnet = torch.nn.DataParallel(self.resnet, device_ids=[i for i in range(0, self.args.num_gpus)])
-
             self.transformers.cuda(0)
-
-
-class Skeleton_TRX_EXP(nn.Module):
-    """
-    Standard Resnet connected to a Temporal Cross Transformer.
-
-    """
-
-    def __init__(self, args):
-        super(Skeleton_TRX_EXP, self).__init__()
-
-        self.train()
-        self.args = args
-
-        self.trans_linear_in_dim = args.trans_linear_in_dim
-        self.features_extractor = MLP(self.args.n_joints * 3,
-                                      self.args.n_joints * 3 * 2, self.trans_linear_in_dim)
-
-        self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s) for s in args.temp_set])
-        self.discriminator = DiscriminatorReductor()
-
-    def forward(self, context_images, context_labels, target_images):
-        batch_size = context_images.size(0)
-        context_features = self.features_extractor(context_images)
-        target_features = self.features_extractor(target_images)
-
-        target_features = target_features.unsqueeze(1)
-        out = self.transformers[0](context_features, context_labels, target_features)
-        all_logits = out['logits']
-
-        chosen = torch.argmax(all_logits, dim=1)
-        is_true_logits = all_logits[torch.arange(batch_size), chosen]
-        is_true_logits = torch.exp(is_true_logits).unsqueeze(-1)
-
-        return_dict = {'logits': all_logits, 'is_true': is_true_logits}
-        return return_dict
 
 
 if __name__ == "__main__":
     from utils.params import TRXConfig
-    model = CNN_TRX(TRXConfig()).cuda()
+    model = TRXOS(TRXConfig()).cuda()
 
     model(torch.rand((1, 5, 16, 90)).cuda(),
           torch.randint(5, (1, 5)).cuda(),

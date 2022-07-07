@@ -42,34 +42,41 @@ class RealSenseIntrinsics(object):
 
 class TRXConfig(object):
     def __init__(self):
+        # MAIN
+        self.model = "DISC"  # DISC or EXP
+        self.input_type = "skeleton"  # skeleton or rgb
+        self.way = 5
+        self.shot = 1
+        self.device = 'cuda'
+
+        # TRAINING
         self.optimize_every = 1
         self.batch_size = 32
         self.start_discriminator_after_epoch = -1
         self.first_mile = 15
         self.second_mile = 1500
-        self.model = "DISC"  # DISC or EXP
-        self.final_ckpt_path = "modules/ar/modules/raws/DISC.pth"
+        self.n_workers = 2 if not ubuntu else 20
+        self.n_epochs = 1000
+        self.log_every = 10 if not ubuntu else 1000
+        self.trans_linear_in_dim = 256
+        self.trans_linear_out_dim = 128
+        self.query_per_class = 1
+        self.trans_dropout = 0.
+        self.num_gpus = 1
+        self.temp_set = [2]
+        self.checkpoints_path = "checkpoints"
+
         # CHOICE DATASET
         self.exemplars_path = "D:\\datasets\\metrabs_trx_skeletons_exemplars" if not ubuntu else "../metrabs_trx_skeletons_exemplars"
         self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"
         self.n_joints = 30
         # self.data_path = "D:/datasets/nturgbd_trx_skeletons_ALL" if not ubuntu else "../nturgbd_trx_skeletons_ALL"
         # self.n_joints = 25
-        # END CHOICE DATASET
-        self.n_workers = 2 if not ubuntu else 20
-        self.n_epochs = 1000
-        self.log_every = 10 if not ubuntu else 1000
+
+        # DEPLOYMENT
+        self.final_ckpt_path = "modules/ar/modules/raws/DISC.pth"
         self.trt_path = 'modules/ar/modules/{}/trx.engine'.format(engine_dir)
-        self.trans_linear_in_dim = 256
-        self.trans_linear_out_dim = 128
-        self.way = 12
-        self.shot = 1
-        self.query_per_class = 1
-        self.trans_dropout = 0.
         self.seq_len = seq_len
-        self.num_gpus = 1
-        self.temp_set = [2]
-        self.device = 'cuda'
 
 
 class FocusModelConfig:

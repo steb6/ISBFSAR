@@ -4,8 +4,8 @@ import torch
 from torch.optim.lr_scheduler import MultiStepLR
 import wandb
 from tqdm import tqdm
-from modules.ar.utils.dataloader import MetrabsData
-from modules.ar.utils.model import Skeleton_TRX_EXP, Skeleton_TRX_Disc
+from modules.ar.utils.dataloader import EpisodicLoader
+from modules.ar.utils.model import TRXOS
 from utils.params import TRXConfig
 from utils.params import ubuntu
 from sklearn.metrics import accuracy_score
@@ -14,47 +14,43 @@ from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
 import numpy as np
 
-device = 1 if ubuntu else 0
-torch.cuda.set_device(device)
 
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
 
-test_classes = ["A1", "A7", "A13", "A19", "A25", "A31", "A37", "A43", "A49", "A55", "A61", "A67", "A73", "A79", "A85",
-                "A91", "A97", "A103", "A109", "A115"]
-# Get conversion class id -> class label
-with open("assets/nturgbd_classes.txt", "r", encoding='utf-8') as f:
-    classes = f.readlines()
-class_dict = {}
-for c in classes:
-    index, name, _ = c.split(".")
-    name = name.strip().replace(" ", "_").replace("/", "-").replace("’", "")
-    class_dict[index] = name
-test_classes = [class_dict[elem]for elem in test_classes]
+device = 1 if ubuntu else 0
+torch.cuda.set_device(device)
+torch.manual_seed(0)
+
 
 if __name__ == "__main__":
     args = TRXConfig()
-    torch.manual_seed(0)
+
+    # Get conversion class id -> class label
+    test_classes = ["A1", "A7", "A13", "A19", "A25", "A31", "A37", "A43", "A49", "A55", "A61", "A67", "A73", "A79",
+                    "A85",
+                    "A91", "A97", "A103", "A109", "A115"]
+    with open("assets/nturgbd_classes.txt", "r", encoding='utf-8') as f:
+        classes = f.readlines()
+    class_dict = {}
+    for c in classes:
+        index, name, _ = c.split(".")
+        name = name.strip().replace(" ", "_").replace("/", "-").replace("’", "")
+        class_dict[index] = name
+    test_classes = [class_dict[elem] for elem in test_classes]
 
     # Create checkpoints directory
-    if not os.path.exists("checkpoints"):
-        os.mkdir("checkpoints")
-    checkpoints_path = "checkpoints" + os.sep + datetime.now().strftime("%d_%m_%Y-%H_%M")
+    if not os.path.exists(args.checkpoints_path):
+        os.mkdir(args.checkpoints_path)
+    checkpoints_path = args.checkpoints_path + os.sep + datetime.now().strftime("%d_%m_%Y-%H_%M")
     if not os.path.exists(checkpoints_path):
         os.mkdir(checkpoints_path)
 
-    # Get right model
-    trx_model = None
-    if args.model == "DISC":
-        trx_model = Skeleton_TRX_Disc
-    elif args.model == "EXP":
-        trx_model = Skeleton_TRX_EXP
-    else:
-        raise Exception("NOT a valid model")
-    model = trx_model(args).cuda(device)
+    # Get model
+    model = TRXOS(args).cuda(device)
     model.train()
 
     # Create dataset iterator
-    train_data = MetrabsData(args.data_path, k=args.way, n_task=10000 if ubuntu else 100)
+    train_data = EpisodicLoader(args.data_path, k=args.way, n_task=10000 if ubuntu else 100, input_type=args.input_type)
 
     # Divide dataset into train and validation
     classes = train_data.classes
@@ -69,8 +65,6 @@ if __name__ == "__main__":
                 continue
         filtered_classes.append(elem)
     train_data.classes = filtered_classes
-
-    # Create loaders
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, num_workers=args.n_workers,
                                                shuffle=True)
 
@@ -105,14 +99,20 @@ if __name__ == "__main__":
         model.train()
         torch.set_grad_enabled(True)
         for i, elem in enumerate(tqdm(train_loader)):
-            support_set, target_set, unknown_set, support_labels, target_label = elem
+
+            support_set = elem['support_set']
+            target_set = elem['target_set']
+            unknown_set = elem['unknown_set']
+
             batch_size = support_set.size(0)
 
             support_set = support_set.reshape(batch_size, args.way, args.seq_len, args.n_joints * 3).cuda().float()
             target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
             unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-            support_labels = support_labels.reshape(batch_size, args.way).cuda().int()
-            target_label = target_label.cuda()
+            support_labels = torch.arange(args.way).repeat(batch_size).reshape(batch_size, args.way).cuda().int()
+            target = np.array(elem['support_classes']).T == \
+                     np.repeat(np.array(elem['target_class']), 5).reshape(batch_size, args.way)
+            target = torch.FloatTensor(target).cuda()
 
             ################
             # Known action #
@@ -121,20 +121,17 @@ if __name__ == "__main__":
 
             # FS known
             fs_pred = out['logits']
-            target = torch.zeros_like(fs_pred)
-            target[torch.arange(batch_size), target_label.long()] = 1
-            scores = fs_pred
             known_fs_loss = fs_loss_fn(fs_pred, target)
             fs_train_losses.append(known_fs_loss.item())
             final_loss = known_fs_loss
 
-            train_accuracy = torch.eq(torch.argmax(scores, dim=1), target_label).int().float().mean().item()
+            train_accuracy = torch.eq(torch.argmax(fs_pred, dim=1), torch.argmax(target, dim=1)).float().mean().item()
             fs_train_accuracies.append(train_accuracy)
 
             if epoch > args.start_discriminator_after_epoch:
                 # OS known (target depends on true class)
                 os_pred = out['is_true']
-                target = torch.eq(torch.argmax(fs_pred, dim=1), target_label).float().unsqueeze(-1)
+                target = torch.eq(torch.argmax(fs_pred, dim=1), torch.argmax(target, dim=1)).float().unsqueeze(-1)
                 # Train only on correct prediction
                 true_s = (target == 1.).nonzero(as_tuple=True)[0]
                 n = len(true_s)
