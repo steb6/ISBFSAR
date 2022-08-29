@@ -19,6 +19,8 @@ from threading import Thread
 
 class ISBFSAR:
     def __init__(self, args, visualizer=True, video_input=None):
+        self.input_type = args.input_type
+
         # Load modules
         self.focus_in = Queue(1)
         self.focus_out = Queue(1)
@@ -27,12 +29,13 @@ class ISBFSAR:
                                                            self.focus_in, self.focus_out))
         self.focus_proc.start()
 
-        self.hpe_in = Queue(1)
-        self.hpe_out = Queue(1)
-        self.hpe_proc = Process(target=run_module, args=(HumanPoseEstimator,
-                                                         (MetrabsTRTConfig(), RealSenseIntrinsics()),
-                                                         self.hpe_in, self.hpe_out))
-        self.hpe_proc.start()
+        if self.input_type == "skeleton":
+            self.hpe_in = Queue(1)
+            self.hpe_out = Queue(1)
+            self.hpe_proc = Process(target=run_module, args=(HumanPoseEstimator,
+                                                             (MetrabsTRTConfig(), RealSenseIntrinsics()),
+                                                             self.hpe_in, self.hpe_out))
+            self.hpe_proc.start()
 
         self.ar = ActionRecognizer(TRXConfig())
 
@@ -87,30 +90,44 @@ class ISBFSAR:
         # Start independent modules
         focus = False
 
-        self.hpe_in.put(img)
         self.focus_in.put(img)
 
-        pose3d_abs, edges, bbox = self.hpe_out.get()
-        focus_ret = self.focus_out.get()
+        # AR ############################################################
+        # TODO EXTRACT HUMAN BOUNDING BOX
+        if self.input_type == "skeleton":
+            self.hpe_in.put(img)
 
+            pose3d_abs, edges, bbox = self.hpe_out.get()
+
+            # Compute distance
+            d = None
+            if pose3d_abs is not None:
+                cam_pos = np.array([0, 0, 0])
+                man_pose = np.array(pose3d_abs[0])
+                d = np.sqrt(np.sum(np.square(cam_pos - man_pose)))
+
+            # Normalize
+            pose3d_root = pose3d_abs - pose3d_abs[0, :] if pose3d_abs is not None else None
+            # pose = pose / self.skeleton_scale  # Normalize  (MetrABS is a cube with sides of 2.2 M)
+            ar_input = pose3d_root
+        else:
+            pose3d_root = None
+            bbox = None
+            edges = None
+            d = None
+            ar_input = img
+
+        # Make inference
+        ar_input = cv2.resize(ar_input, (224, 224))  # TODO REMOVE, CROP HUMAN
+        ar_input = ar_input.swapaxes(-1, -3).swapaxes(-1, -2)
+        results = self.ar.inference(ar_input)
+        actions, is_true = results
+
+        # FOCUS #######################################################
+        focus_ret = self.focus_out.get()
         if focus_ret is not None:
             focus, face = focus_ret
             # img = self.focus.print_bbox(img, face)  # TODO PRINT FACE AGAIN
-
-        # Compute distance
-        d = None
-        if pose3d_abs is not None:
-            cam_pos = np.array([0, 0, 0])
-            man_pose = np.array(pose3d_abs[0])
-            d = np.sqrt(np.sum(np.square(cam_pos - man_pose)))
-
-        # Normalize
-        pose3d_root = pose3d_abs - pose3d_abs[0, :] if pose3d_abs is not None else None
-        # pose = pose / self.skeleton_scale  # Normalize  (MetrABS is a cube with sides of 2.2 M)
-
-        # Make inference
-        results = self.ar.inference(pose3d_root)
-        actions, is_true = results
 
         end = time.time()
 
@@ -258,16 +275,18 @@ class ISBFSAR:
             self.log("GO!")
             playsound('assets' + os.sep + 'start.wav')
             poses = []
-            imgs = []  # TODO REMOVE DEBUG
+            imgs = []
             i = 0
-            while len(poses) < self.window_size:
+            while len(poses if self.input_type == "skeleton" else imgs) < self.window_size:
                 img, pose, _ = self.get_frame()
-                imgs.append(img)  # TODO REMOVE DEBUG
+                img = cv2.resize(img, (224, 224))  # TODO CROP THE HUMAN FROM THE IMAGE
+                img = img.swapaxes(-1, -3).swapaxes(-1, -2)
+                imgs.append(img)
                 if pose is not None:
                     poses.append(pose)
                 self.log("{:.2f}%".format((i / (self.window_size - 1)) * 100))
                 i += 1
-            data = np.stack(poses)
+            data = np.stack(poses if self.input_type == "skeleton" else imgs)
             playsound('assets' + os.sep + 'stop.wav')
             self.log("100%")
         # If a path to a video is provided
@@ -306,25 +325,25 @@ class ISBFSAR:
             data = data[:(len(data) - (len(data) % self.window_size))]
             data = data[list(range(0, len(data), int(len(data) / self.window_size)))]
 
-        # TODO SAVE POSE AND
-        import pickle
-        out_dir = "testing"
-        skeleton = 'smpl+head_30'
-        with open('assets/skeleton_types.pkl', "rb") as input_file:
-            skeleton_types = pickle.load(input_file)
-        edges = skeleton_types[skeleton]['edges']
-        from utils.matplotlib_visualizer import MPLPosePrinter
-        vis = MPLPosePrinter()
-        os.mkdir(os.path.join("imgs", flag))
-        for i, img in enumerate(imgs):
-            img = img[::-1, :, ::-1]
-            cv2.imwrite(os.path.join("imgs", flag, f"img_{i}.png"), img)
-        for j, pose in enumerate(poses):
-            vis.clear()
-            vis.print_pose(pose.reshape(-1, 3), edges)
-            vis.save(os.path.join("imgs", flag, f"pose_{j}.png"))
-            vis.sleep(0.01)
-        # TODO END
+        # # TODO SAVE POSE AND
+        # import pickle
+        # out_dir = "testing"
+        # skeleton = 'smpl+head_30'
+        # with open('assets/skeleton_types.pkl', "rb") as input_file:
+        #     skeleton_types = pickle.load(input_file)
+        # edges = skeleton_types[skeleton]['edges']
+        # from utils.matplotlib_visualizer import MPLPosePrinter
+        # vis = MPLPosePrinter()
+        # os.mkdir(os.path.join("imgs", flag))
+        # for i, img in enumerate(imgs):
+        #     img = img[::-1, :, ::-1]
+        #     cv2.imwrite(os.path.join("imgs", flag, f"img_{i}.png"), img)
+        # for j, pose in enumerate(poses):
+        #     vis.clear()
+        #     vis.print_pose(pose.reshape(-1, 3), edges)
+        #     vis.save(os.path.join("imgs", flag, f"pose_{j}.png"))
+        #     vis.sleep(0.01)
+        # # TODO END
         self.log("Success!")
         data = (data, flag)
         self.ar.train(data)

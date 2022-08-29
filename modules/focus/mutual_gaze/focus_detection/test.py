@@ -1,3 +1,4 @@
+import platform
 import torch.optim
 from torchvision import transforms
 from modules.focus.mutual_gaze.focus_detection.utils.MARIADataset import MARIAData
@@ -9,6 +10,7 @@ import cv2
 
 # ckpt_path = "modules/focus/mutual_gaze/focus_detection/checkpoints/f1_0.82_loss_7.24_HEADS_maria_aug.pth"
 # {'test/accuracy': '0.91', 'test/precision': '0.88', 'test/recall': '0.96', 'test/f1': '0.92'}
+from utils.params import MutualGazeConfig
 
 ckpt_path = "modules/focus/mutual_gaze/focus_detection/checkpoints/MNET3/sess_4_acc_0.84.pth"
 # {'test/accuracy': '0.88', 'test/precision': '0.90', 'test/recall': '0.85', 'test/f1': '0.87'}
@@ -16,10 +18,16 @@ ckpt_path = "modules/focus/mutual_gaze/focus_detection/checkpoints/MNET3/sess_4_
 threshold = 0.5
 
 if __name__ == "__main__":
-    test_data = MARIAData("D:/datasets/focus_dataset_heads", mode="test", split_number=4)
-    test_loader = torch.utils.data.DataLoader(test_data, batch_size=32, num_workers=2, shuffle=True)
+    is_local = "Windows" in platform.platform()
 
-    model = Model()
+    config = MutualGazeConfig()
+    sess = 0
+    dataset = "D:/datasets/useless/"+config.dataset if is_local else "../"+config.dataset
+    test_data = MARIAData(dataset, mode="test", split_number=sess)
+    test_loader = torch.utils.data.DataLoader(test_data, batch_size=32,
+                                              num_workers=2 if is_local else 2)
+
+    model = Model(config.model, config.pretrained)
     model.load_state_dict(torch.load(ckpt_path))
     model.cuda()
     model.eval()

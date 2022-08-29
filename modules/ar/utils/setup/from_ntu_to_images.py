@@ -1,17 +1,28 @@
 import pickle
 import os
-import cv2
 import shutil
+import sys
+sys.path.append("modules/hpe/assets/pytorchYOLOv4")
+from modules.hpe.assets.pytorchYOLOv4.models import Yolov4
+import cv2
 from tqdm import tqdm
 from modules.hpe.utils.misc import postprocess_yolo_output
 from utils.params import MetrabsTRTConfig
-from utils.tensorrt_runner import Runner
 import numpy as np
+from utils.params import ubuntu
+import torch
 
-in_dataset_path = "D:\\datasets\\useless\\nturgbd"
-out_dataset_path = "D:\\datasets\\nturgbd_images4"
+# sent 51,663,880,598 bytes  received 27,960,450 bytes  1,401,375.60 bytes/sec
+# total size is 51,578,421,405  speedup is 1.00
+
+# missing = ["blow_nose", "falling", "nausea_or_vomiting_condition", "sneeze-cough", "staggering", "stretch_oneself",
+#            "touch_back_(backache)", "touch_chest_(stomachache-heart_pain)", "touch_head_(headache)",
+#            "touch_neck_(neckache)", "use_a_fan_(with_hand_or_paper)-feeling_warm", "yawn"]
+
+in_dataset_path = "D:\\datasets\\useless\\nturgbd" if not ubuntu else "../nturgbd"
+out_dataset_path = "D:\\datasets\\NTURGBD_FINAL_IMAGES_no_pad" if not ubuntu else "../NTURGBD_FINAL_IMAGES_no_pad"
 classes_path = "assets/nturgbd_classes.txt"
-n = 16
+n = 8
 
 # it reached 35978
 
@@ -27,11 +38,20 @@ if __name__ == "__main__":
     edges = skeleton_types[skeleton]['edges']
 
     model_config = MetrabsTRTConfig()
-    yolo = Runner(model_config.yolo_engine_path)
-    # image_transformation = Runner(model_config.image_transformation_path)
+
+    # TODO LOAD YOLO
+    WEIGHT_FILE = "modules/hpe/modules/raws/yolov4.pth" if not ubuntu else "yolov4.pth"
+    N_CLASSES = 80
+
+    model = Yolov4(n_classes=N_CLASSES, inference=True)
+    pretrained_dict = torch.load(WEIGHT_FILE, map_location=torch.device('cuda'))
+    model.load_state_dict(pretrained_dict)
+    model.eval()
+    model.cuda()
+    # TODO END
 
     # Count total number of files (we remove 10 classes over 60 because those involves two person)
-    total = int(sum([len(files) if '_s' in r else 0 for r, d, files in os.walk(in_dataset_path)]) * (1 - 16/60))
+    total = int(sum([len(files) if '_s' in r else 0 for r, d, files in os.walk(in_dataset_path)]) * (1 - 26/120))
 
     # Get conversion class id -> class label
     with open(classes_path, "r", encoding='utf-8') as f:
@@ -42,19 +62,22 @@ if __name__ == "__main__":
         name = name.strip().replace(" ", "_").replace("/", "-").replace("’", "")
         class_dict[index] = name
 
-    # Create output directories (ONLY THE MISSING ONES)  # TODO CAREFUL, ERASE WHAT DONE BEFORE
+    # # Create output directories
+    os.mkdir(out_dataset_path)
     for i, value in enumerate(list(class_dict.values())):
         if 0 <= i <= 49-1 or 61-1 <= i <= 105-1:
             if os.path.exists(os.path.join(out_dataset_path, value)):
                 shutil.rmtree(os.path.join(out_dataset_path, value))
             os.mkdir(os.path.join(out_dataset_path, value))
 
+    curl = 0  # TODO REMOVE DEBUG
     # Iterate all videos
     with tqdm(total=total) as progress_bar:
+        curl += 1  # TODO REMOVE DEBUG
         for root, dirs, files in os.walk(in_dataset_path):
 
-            if '_s' not in root:
-                continue
+            # if '_s' in root:  # BEFORE it was `not in root`
+            #     continue
 
             for file in files:
                 # Retrieve class name (between A and _ es 'S001C001P001R001A001_rgb.avi'
@@ -62,15 +85,12 @@ if __name__ == "__main__":
                 class_id = "A" + str(class_id)
                 class_name = class_dict[class_id]
 
-                # Skip if two person are involved
-                if 41-1 <= list(class_dict.keys()).index(class_id) <= 60-1 or 103 - 1 <= list(class_dict.keys()).index(class_id) <= 120 - 1:
-                    continue
+                # if class_name not in missing:
+                #     continue
 
-                # Check if output path already exists
-                output_path = os.path.join(out_dataset_path, class_name)
-                offset = sum([len(d) for r, d, files in os.walk(output_path)])
-                output_path = os.path.join(output_path, str(offset))
-                os.mkdir(output_path)
+                # Skip if two person are involved
+                if 50-1 <= list(class_dict.keys()).index(class_id) <= 60-1 or 106 - 1 <= list(class_dict.keys()).index(class_id) <= 120 - 1:
+                    continue
 
                 # Read video
                 full = os.path.join(root, file)
@@ -106,8 +126,10 @@ if __name__ == "__main__":
                     square_img = square_img / 255.0
 
                     # Yolo
-                    outputs = yolo(square_img)
+                    square_img = torch.FloatTensor(square_img).cuda()
+                    outputs = model(square_img)
                     boxes, confidences = outputs[0].reshape(1, 4032, 1, 4), outputs[1].reshape(1, 4032, 80)
+                    boxes, confidences = boxes.detach().cpu().numpy(), confidences.detach().cpu().numpy()
                     bboxes_batch = postprocess_yolo_output(boxes, confidences, model_config.yolo_thresh,
                                                            model_config.nms_thresh)
 
@@ -129,20 +151,35 @@ if __name__ == "__main__":
                     x2 = int(human[2] * frame.shape[1]) if int(human[2] * frame.shape[1]) > 0 else 0
                     y2 = int(human[3] * frame.shape[0]) if int(human[3] * frame.shape[0]) > 0 else 0
 
-                    frame = frame[y1:y2, x1:x2]
-                    frame = cv2.copyMakeBorder(frame,
-                                               int((frame.shape[1] - frame.shape[0]) / 2) if frame.shape[1] > frame.shape[0] else 0,
-                                               int((frame.shape[1] - frame.shape[0]) / 2) if frame.shape[1] > frame.shape[0] else 0,
-                                               int((frame.shape[0] - frame.shape[1]) / 2) if frame.shape[0] > frame.shape[1] else 0,
-                                               int((frame.shape[0] - frame.shape[1]) / 2) if frame.shape[0] > frame.shape[1] else 0,
-                                               cv2.BORDER_CONSTANT)
+                    # TODO START NEW
+                    xm = int((x1 + x2) / 2)
+                    ym = int((y1 + y2) / 2)
+                    l = max(xm - x1, ym - y1)
+                    frame = frame[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
+                    # TODO START OLD
+                    #
+                    # frame = frame[y1:y2, x1:x2]
+                    # frame = cv2.copyMakeBorder(frame,
+                    #                            int((frame.shape[1] - frame.shape[0]) / 2) if frame.shape[1] > frame.shape[0] else 0,
+                    #                            int((frame.shape[1] - frame.shape[0]) / 2) if frame.shape[1] > frame.shape[0] else 0,
+                    #                            int((frame.shape[0] - frame.shape[1]) / 2) if frame.shape[0] > frame.shape[1] else 0,
+                    #                            int((frame.shape[0] - frame.shape[1]) / 2) if frame.shape[0] > frame.shape[1] else 0,
+                    #                            cv2.BORDER_CONSTANT)
+                    # TODO END
+
                     frame = cv2.resize(frame, (224, 224))
                     # cv2.imshow("frame", frame.astype(np.uint8))  # TODO VISUALIZE DEBUG
                     # cv2.waitKey(0)  # TODO VISUALIZE DEBUG
                     filtered_frames.append(frame)
 
                 if good:
+                    # Check if output path already exists
+                    output_path = os.path.join(out_dataset_path, class_name)
+                    offset = sum([len(d) for r, d, files in os.walk(output_path)])
+                    output_path = os.path.join(output_path, str(offset))
+                    os.mkdir(output_path)
+
                     for i, frame in enumerate(filtered_frames):
-                        cv2.imwrite(output_path+f"\\{i}.png", frame)
+                        cv2.imwrite(os.path.join(output_path, f"{i}.png"), frame)
 
                 progress_bar.update()

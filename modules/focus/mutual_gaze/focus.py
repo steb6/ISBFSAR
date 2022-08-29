@@ -9,7 +9,7 @@ import numpy as np
 from tqdm import tqdm
 from utils.params import MutualGazeConfig
 
-WINDOW_SIZE = 3
+WINDOW_SIZE = 1
 
 
 class FocusDetector:
@@ -29,6 +29,8 @@ class FocusDetector:
         self.focuses = []
 
     def estimate(self, img):
+
+        # Get head candidates
         inp = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         inp = torch.FloatTensor(inp).cuda() / 255.
         inp = inp.permute(2, 0, 1)
@@ -37,6 +39,7 @@ class FocusDetector:
         scores = res[0]['scores'].detach().cpu().numpy()
         good = nms_cpu(boxes, scores, nms_thresh=0.01)
 
+        # Filter candidates
         if len(good) > 0:
             boxes = boxes[good]
             scores = scores[good]
@@ -44,6 +47,7 @@ class FocusDetector:
             boxes = boxes[good]
             scores = scores[good]
 
+        # Take best candidate and postprocess image
         if len(boxes) > 0:
             box = boxes[0]
             x = img[box[1]:box[3], box[0]:box[2]]
@@ -54,31 +58,15 @@ class FocusDetector:
             elif x.shape[1] < x.shape[0]:
                 pad = int((x.shape[0] - x.shape[1]) / 2)
                 x = np.pad(x, ((0, 0), (pad, pad), (0, 0)), 'constant', constant_values=0)
-            x = cv2.resize(x, (256, 256))
 
-            normalized_image = copy.deepcopy(x)
-
-            # TODO TEST TIME AUGMENTATION
-            # imgs = [x for _ in range(8)]
-            # imgs_aug = []
-            # for i in imgs:
-            #     i = horizontal_shift(i, 0.2)
-            #     i = vertical_shift(i, 0.2)
-            #     i = brightness(i, 0.5, 2)
-            #     i = zoom(i, 0.9)
-            #     if random.random() < 0.5:
-            #         i = horizontal_flip(i, False)
-            #     i = rotation(i, 30)
-            #     imgs_aug.append(i)
-            # x = np.stack(imgs_aug)
-            # TODO TEST TIME AUGMENTATION
-
-            x = torch.FloatTensor(x)
+            # Preprocessing for focus
+            x = cv2.resize(x, (224, 224))
+            x = x / 255.
+            x = x - np.array([0.485, 0.456, 0.406])
+            x = x / np.array([0.229, 0.224, 0.225])
+            x = torch.FloatTensor(x).cuda()
             x = x.unsqueeze(0)
             x = x.permute(0, 3, 1, 2)
-            x = x / 255.
-            x = self.normalize(x)
-            x = x.cuda()
 
             out = self.focus_model(x)
             out = out.mean()
@@ -90,25 +78,29 @@ class FocusDetector:
             else:
                 is_focus = out.item() > 0.5
 
-            return out.item(), box
+            return out.item(), box, is_focus
 
-    def print_bbox(self, img, box, score):
-        img = cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), (0, 255, 0) if score>0.5 else (0, 0, 255), 2)
+    def print_bbox(self, img, box, score, is_focus):
+        img = cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), (0, 255, 0) if is_focus else (0, 0, 255), 2)
+        img = cv2.putText(img, "Focus: {:.2f}".format(score), (box[0], box[1]), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                          (0, 255, 0) if is_focus else (0, 0, 255))
         return img
 
 
 if __name__ == "__main__":
 
-    cam = cv2.VideoCapture(2)
+    cam = cv2.VideoCapture('assets/recording.mp4')
+    # cam = cv2.VideoCapture(0)
+
     focus_detector = FocusDetector(MutualGazeConfig())
 
     for _ in tqdm(range(10000)):
         ret, img = cam.read()
         res = focus_detector.estimate(img)
         if res:
-            score, bbox = res
+            score, bbox, is_focus = res
 
-            img = focus_detector.print_bbox(img, bbox, score)
+            img = focus_detector.print_bbox(img, bbox, score, is_focus)
             print(score)
             cv2.imshow("bbox", img)
             cv2.waitKey(1)

@@ -173,10 +173,10 @@ class MLP(torch.nn.Module):
 
 
 class Discriminator(torch.nn.Module):
-    def __init__(self, seq_len=120, dim=128):
+    def __init__(self, seq_len=120, dim=128, l=16):
         super(Discriminator, self).__init__()
-        self.dimensionality_reduction = torch.nn.Linear(dim, 16)
-        self.fc1 = torch.nn.Linear(seq_len*16, 256)
+        self.dimensionality_reduction = torch.nn.Linear(dim, l)
+        self.fc1 = torch.nn.Linear(seq_len*l, 256)
         self.relu1 = torch.nn.ReLU()
         self.fc2 = torch.nn.Linear(256, 64)
         self.relu2 = torch.nn.ReLU()
@@ -212,21 +212,29 @@ class TRXOS(nn.Module):
 
         self.model = args.model
         if self.model == "DISC":
-            self.discriminator = Discriminator()
+            self.discriminator = Discriminator(seq_len=int(((args.seq_len-1)*args.seq_len)/2),
+                                               dim=args.trans_linear_out_dim,
+                                               l=args.seq_len)
         if self.model == "EXP":
             self.discriminator = torch.exp
 
     def forward(self, context_images, context_labels, target_images):
-        batch_size = context_images.size(0)
-        context_features = self.features_extractor(context_images)
-        target_features = self.features_extractor(target_images)
+        b = context_images.size(0)
+        # with torch.no_grad():
+        if self.args.input_type == "rgb":
+            b, k, l, c, h, w = context_images.size()
+            context_features = self.features_extractor(context_images.reshape(-1, c, h, w)).reshape(b, k, l, -1)
+            target_features = self.features_extractor(target_images.reshape(-1, c, h, w)).reshape(b, l, -1)
+        else:
+            context_features = self.features_extractor(context_images)
+            target_features = self.features_extractor(target_images)
 
         target_features = target_features.unsqueeze(1)
         out = self.transformers[0](context_features, context_labels, target_features)
         all_logits = out['logits']
 
         chosen_index = torch.argmax(all_logits, dim=1)
-        feature = out['diffs'][torch.arange(batch_size), chosen_index, ...]
+        feature = out['diffs'][torch.arange(b), chosen_index, ...]
         decision = self.discriminator(feature)
 
         return {'logits': all_logits, 'is_true': decision}

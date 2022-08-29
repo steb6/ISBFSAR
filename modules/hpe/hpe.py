@@ -5,6 +5,10 @@ import einops
 import numpy as np
 from utils.input import RealSense
 from utils.tensorrt_runner import Runner
+from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig
+from tqdm import tqdm
+import cv2
+from utils.matplotlib_visualizer import MPLPosePrinter
 
 
 class HumanPoseEstimator:
@@ -95,8 +99,8 @@ class HumanPoseEstimator:
         bbone_in = self.image_transformation([frame.astype(int), H.astype(np.float32)])
 
         bbone_in = bbone_in[0].reshape(self.n_test, 256, 256, 3)  # [..., ::-1]
-        cv2.imshow("BBONE", bbone_in[0].astype(np.uint8))  # TODO SOLVE THE MISTERY
-        cv2.waitKey(1)  # TODO SOLVE THE MISTERY
+        # cv2.imshow("BBONE", bbone_in[0].astype(np.uint8))  # TODO SOLVE THE MISTERY
+        # cv2.waitKey(1)  # TODO SOLVE THE MISTERY
         bbone_in_ = (bbone_in / 255.0).astype(np.float32)
 
         # BackBone
@@ -200,11 +204,6 @@ class HumanPoseEstimator:
 
 
 if __name__ == "__main__":
-    from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig
-    from tqdm import tqdm
-    import cv2
-    from utils.matplotlib_visualizer import MPLPosePrinter
-
     args = MainConfig()
     vis = MPLPosePrinter()
 

@@ -1,45 +1,44 @@
 import pickle
 import numpy as np
-from modules.ar.utils.model import Skeleton_TRX_Disc as CNN_TRX
+from modules.ar.utils.model import TRXOS
 from utils.params import TRXConfig
-# from utils.tensorrt_runner import Runner
 import torch
 from tqdm import tqdm
-import copy
 
 
 class ActionRecognizer:
     def __init__(self, args):
+        self.input_type = args.input_type
         self.device = args.device
 
-        # self.ar = Runner(args.trt_path)
-        self.ar = CNN_TRX(TRXConfig())
+        self.ar = TRXOS(TRXConfig())
         self.ar.load_state_dict(torch.load(args.final_ckpt_path,
                                            map_location=torch.device(0))['model_state_dict'])
         self.ar.cuda()
         self.ar.eval()
 
-        self.support_set = torch.zeros((args.way, args.seq_len, args.n_joints * 3)).float()
+        shape = (args.way, args.seq_len, args.n_joints * 3) if self.input_type == "skeleton" else (args.way, args.seq_len, 3, 224, 224)
+        self.support_set = torch.zeros(shape).float()
         self.previous_frames = []
         self.support_labels = []
         self.seq_len = args.seq_len
         self.way = args.way
-        self.n_joints = args.n_joints
+        self.n_joints = args.n_joints if args.input_type == "skeleton" else 0
         self.similar_actions = []
 
         self.requires_focus = [False for _ in range(args.way)]
         self.requires_box = [None for _ in range(args.way)]
 
-    def inference(self, pose):
-        if pose is None:
+    def inference(self, pose_or_img):
+        if pose_or_img is None:
             return {}, 0
 
         if len(self.support_labels) == 0:  # no class to predict
             return {}, 0
 
-        pose = torch.FloatTensor(pose.reshape(-1)).cuda()
+        pose_or_img = torch.FloatTensor(pose_or_img).cuda()
 
-        self.previous_frames.append(pose)
+        self.previous_frames.append(pose_or_img)
         if len(self.previous_frames) < self.seq_len:  # few samples
             return {}, 0
         elif len(self.previous_frames) == self.seq_len + 1:
@@ -91,8 +90,8 @@ class ActionRecognizer:
         """
         if raw is not None:  # if some data are given
             # Convert raw
-            x = torch.FloatTensor(raw[0].reshape(self.seq_len, -1)).cuda()
-            if raw[1] not in self.support_labels and len(self.support_labels) < 5:
+            x = torch.FloatTensor(raw[0]).cuda()
+            if raw[1] not in self.support_labels and len(self.support_labels) < self.way:
                 self.support_labels.append(raw[1])
             y = int(self.support_labels.index(raw[1]))
             self.support_set[y] = x

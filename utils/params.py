@@ -1,14 +1,17 @@
 import platform
 
+input_type = "rgb"  # rgb or skeleton
+seq_len = 8 if input_type == "rgb" else 16  # 8 for rgb and 16 for skeleton
+
+
 ubuntu = platform.system() == "Linux"
 engine_dir = "engines"
 print("Ubuntu: {}".format(ubuntu))
 
-seq_len = 16
-
 
 class MainConfig(object):
     def __init__(self):
+        self.input_type = input_type  # rgb or skeleton
         self.cam = "realsense"  # webcam or realsense
         self.cam_width = 640
         self.cam_height = 480
@@ -44,21 +47,35 @@ class TRXConfig(object):
     def __init__(self):
         # MAIN
         self.model = "DISC"  # DISC or EXP
-        self.input_type = "skeleton"  # skeleton or rgb
+        self.input_type = input_type  # skeleton or rgb
         self.way = 5
         self.shot = 1
         self.device = 'cuda'
 
+        # CHOICE DATASET
+        # NTU METRABS SKELETONS
+        # self.exemplars_path = "D:\\datasets\\metrabs_trx_skeletons_exemplars" if not ubuntu else "../metrabs_trx_skeletons_exemplars"
+        # self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"
+        # self.n_joints = 30
+        # NTU ORIGINAL SKELETONS
+        # self.data_path = "D:/datasets/nturgbd_trx_skeletons_ALL" if not ubuntu else "../nturgbd_trx_skeletons_ALL"
+        # self.n_joints = 25
+        # NTU RGB IMAGES
+        self.data_path = "D:/datasets/NTURGBD_FINAL_IMAGES" if not ubuntu else "../NTURGBD_FINAL_IMAGES_no_pad"
+
         # TRAINING
-        self.optimize_every = 1
-        self.batch_size = 32
-        self.start_discriminator_after_epoch = -1
-        self.first_mile = 15
-        self.second_mile = 1500
-        self.n_workers = 2 if not ubuntu else 20
-        self.n_epochs = 1000
+        self.initial_lr = 1e-2 if self.input_type == "skeleton" else 1e-3
+        self.n_task = (100 if self.input_type == "skeleton" else 30) if not ubuntu else (10000 if self.input_type == "skeleton" else 100)
+        self.optimize_every = 16  # Put to 1 if not used, not 0 or -1!
+        self.batch_size = 1 if not ubuntu else (32 if self.input_type == "skeleton" else 1)
+        self.n_epochs = 10000
+        self.start_discriminator_after_epoch = self.n_epochs  # TODO CAREFUL
+        self.first_mile = self.n_epochs  # 15 TODO CAREFUL
+        self.second_mile = self.n_epochs  # 1500 TODO CAREFUL
+        self.n_workers = 0 if not ubuntu else 20
+
         self.log_every = 10 if not ubuntu else 1000
-        self.trans_linear_in_dim = 256
+        self.trans_linear_in_dim = 256 if self.input_type == "skeleton" else 1000
         self.trans_linear_out_dim = 128
         self.query_per_class = 1
         self.trans_dropout = 0.
@@ -66,15 +83,8 @@ class TRXConfig(object):
         self.temp_set = [2]
         self.checkpoints_path = "checkpoints"
 
-        # CHOICE DATASET
-        self.exemplars_path = "D:\\datasets\\metrabs_trx_skeletons_exemplars" if not ubuntu else "../metrabs_trx_skeletons_exemplars"
-        self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"
-        self.n_joints = 30
-        # self.data_path = "D:/datasets/nturgbd_trx_skeletons_ALL" if not ubuntu else "../nturgbd_trx_skeletons_ALL"
-        # self.n_joints = 25
-
         # DEPLOYMENT
-        self.final_ckpt_path = "modules/ar/modules/raws/DISC.pth"
+        self.final_ckpt_path = "modules/ar/modules/raws/DISC.pth" if self.input_type == "skeleton" else "modules/ar/modules/raws/rgb/5000.pth"
         self.trt_path = 'modules/ar/modules/{}/trx.engine'.format(engine_dir)
         self.seq_len = seq_len
 
@@ -119,11 +129,11 @@ class FocusConfig:
 class MutualGazeConfig:
     def __init__(self):
         self.head_model = 'modules/focus/mutual_gaze/head_detection/epoch_0.pth'
-        self.focus_model = 'modules/focus/mutual_gaze/focus_detection/checkpoints/group_RNET MARIA SMALL_sess_4_f1_0.82.pth'
+        self.focus_model = 'modules/focus/mutual_gaze/focus_detection/checkpoints/sess_0_f1_1.00.pth'
 
-        self.augmentation_size = 0.4
-        self.dataset = "focus_dataset_small_easy"
-        self.model = "rnet"
+        self.augmentation_size = 0.8
+        self.dataset = "focus_dataset_heads"
+        self.model = "facenet"  # facenet, resnet
 
         self.batch_size = 32
         self.lr = 1e-6

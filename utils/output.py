@@ -17,6 +17,8 @@ class VISPYVisualizer:
             self.log.text = ''
         elif x.text == '\\':
             self.show = not self.show
+        elif x.text == '`':
+            self.os = not self.os
         else:
             self.input_text += x.text
         self.input_string.text = self.input_text
@@ -39,6 +41,8 @@ class VISPYVisualizer:
         self.canvas.size = 1200, 600
         self.canvas.show()
         self.canvas.events.key_press.connect(self.printer)
+
+        self.os = False
 
         # This is the top-level widget that will hold three ViewBoxes, which will
         # be automatically resized whenever the grid is resized.
@@ -77,7 +81,7 @@ class VISPYVisualizer:
         self.fps = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
                         font_size=12, pos=(0.75, 0.9))
         self.is_same_action = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
-                                   font_size=12, pos=(0.25, 0.7))
+                                   font_size=12, pos=(0.75, 0.7))
         self.b2.add(self.is_same_action)
         self.b2.add(self.fps)
         self.actions = {}
@@ -95,7 +99,7 @@ class VISPYVisualizer:
         b4.camera = scene.PanZoomCamera(rect=(0, 0, 1, 1))
         b4.camera.interactive = False
         b4.border_color = (0.5, 0.5, 0.5, 1)
-        self.desc_add = Text('ADD ACTION: add action_name [-focus][-box/nobox]', color='white', rotation=0,
+        self.desc_add = Text('ADD ACTION: add action_name [-focus]', color='white', rotation=0,
                              anchor_x="left",
                              anchor_y="bottom",
                              font_size=12, pos=(0.1, 0.9))
@@ -154,43 +158,55 @@ class VISPYVisualizer:
                 self.focus.text = "FOCUS"
                 self.focus.color = "green"
             else:
-                self.focus.text = "NOT FOCUS"
+                self.focus.text = "NOT FOC."
                 self.focus.color = "red"
             self.fps.text = "FPS: {:.2f}".format(fps)
             self.distance.text = "DIST: {:.2f}m".format(distance) if distance is not None else "DIST:"
 
-            # m = max([_[0] for _ in results.values()]) if len(results) > 0 else 0  # Just max
+            m = max(results.values()) if len(results) > 0 else 0  # Just max
             for i, r in enumerate(results.keys()):
                 score = results[r]
                 requires_box = False
                 requires_focus = False
                 # Check if conditions are satisfied
-                # if score == m:  # Just max
-                if score > 0.5:
-                    c1 = True if not requires_focus else focus
-                    c2 = True if (requires_box is None) else (box == requires_box)
-                    if c1 and c2:
-                        color = "green"
+                if score == m:
+                    # OS SCORE
+                    if self.os:
+                        self.is_same_action.text = "{:.2f}".format(float(is_true))
+                        self.is_same_action.color = 'red' if float(is_true) < 0.75 else 'green'
+                        self.is_same_action.pos = 0.75, 0.7 - (0.1 * i)
                     else:
-                        color = "orange"
+                        self.is_same_action.text = ""
+                    c1 = True if not requires_focus else focus
+                    c2 = float(is_true) >= 0.75
+                    if self.os:
+                        if c1 and c2:
+                            color = "green"
+                        else:
+                            color = "orange"
+                    else:
+                        if c1:
+                            color = "green"
+                        else:
+                            color = "orange"
                 else:
                     color = "red"
                 if r in self.actions.keys():
                     text = "{}: {:.2f}".format(r, score)
                     if requires_focus:
                         text += ' (0_0)'
-                    if requires_box:
-                        text += ' [ ]'
-                    if requires_box is not None and not requires_box:
-                        text += ' [X]'
+                    # if requires_box:
+                    #     text += ' [ ]'
+                    # if requires_box is not None and not requires_box:
+                    #     text += ' [X]'
                     self.actions[r].text = text
                 else:
                     self.actions[r] = Text('', rotation=0, anchor_x="center", anchor_y="bottom", font_size=12)
                     self.b2.add(self.actions[r])
                 self.actions[r].pos = 0.5, 0.7 - (0.1 * i)
                 self.actions[r].color = color
-                self.is_same_action.text = "{:.2f}".format(float(is_true))
-                self.is_same_action.color = 'red' if float(is_true) < 0.75 else 'green'
+
+                # self.is_same_action.pos = 4
 
             # Remove erased action (if any)
             to_remove = []

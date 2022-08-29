@@ -1,12 +1,13 @@
 import torch
 import torchvision.models as models
+from facenet_pytorch.models.inception_resnet_v1 import InceptionResnetV1
 
 
 class MutualGazeDetectorHeads(torch.nn.Module):
-    def __init__(self, model, pretrained=False):
+    def __init__(self, model, pretrained=True):
         super(MutualGazeDetectorHeads, self).__init__()
         self.backbone = BackBone(model, pretrained)
-        self.classifier = BinaryClassifier(1000)
+        self.classifier = BinaryClassifier(512)
 
     def forward(self, x):
         features = self.backbone(x)
@@ -29,10 +30,10 @@ class BinaryClassifier(torch.nn.Module):
     def __init__(self, input_size):
         super(BinaryClassifier, self).__init__()
         self.layer1 = torch.nn.Linear(input_size, 256)
-        self.drop1 = torch.nn.Dropout(0.5)
+        self.drop1 = torch.nn.Dropout(0.1)
         self.act1 = torch.nn.ReLU()
         self.layer2 = torch.nn.Linear(256, 64)
-        self.drop2 = torch.nn.Dropout(0.5)
+        self.drop2 = torch.nn.Dropout(0.1)
         self.act2 = torch.nn.ReLU()
         self.layer3 = torch.nn.Linear(64, 1)
         self.out = torch.nn.Sigmoid()
@@ -51,12 +52,12 @@ class BinaryClassifier(torch.nn.Module):
 class BackBone(torch.nn.Module):
     def __init__(self, model, pretrained=True):
         super(BackBone, self).__init__()
-        if model == "rnet":
-            self.model = models.resnet18(pretrained=pretrained)
+        if model == "resnet":
+            self.model = models.resnet50(pretrained=pretrained)
         elif model == "mnet":
             self.model = models.mobilenet_v3_small(pretrained=pretrained)
-        # self.model = models.vgg19(pretrained=True)
-        # self.model = models.inception_v3(pretrained=True)
+        elif model == "facenet":
+            self.model = InceptionResnetV1(pretrained='vggface2')
 
     def forward(self, x):
         return self.model(x)

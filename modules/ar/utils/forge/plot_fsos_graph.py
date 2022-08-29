@@ -2,7 +2,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pickle
 
-with open("xpaper/RESULTS100", "rb") as f:
+with open("xpaper2/RESULTS100", "rb") as f:
     results = pickle.load(f)
 
 metric = "FSOS-ACC"  # OS-ACC FSOS-ACC OS-F1
@@ -31,8 +31,8 @@ ax.fill_between(ks, (disc_accs-disc_cfs), (disc_accs+disc_cfs), color='g', alpha
 ax.plot(ks,exp_accs, 'r:', label="EXP")
 ax.fill_between(ks, (exp_accs-exp_cfs), (exp_accs+exp_cfs), color='r', alpha=.1)
 
-ax.plot(ks,discnoos_accs, 'b-', label="DISC-NO-OS")
-ax.fill_between(ks, (discnoos_accs-discnoos_cfs), (discnoos_accs+discnoos_cfs), color='b', alpha=.1)
+# ax.plot(ks,discnoos_accs, 'b-', label="DISC-NO-OS")
+# ax.fill_between(ks, (discnoos_accs-discnoos_cfs), (discnoos_accs+discnoos_cfs), color='b', alpha=.1)
 
 # Show
 plt.xlabel("K - dimension of support set")

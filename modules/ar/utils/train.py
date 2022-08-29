@@ -17,9 +17,10 @@ import numpy as np
 
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
 
-device = 1 if ubuntu else 0
-torch.cuda.set_device(device)
-torch.manual_seed(0)
+# gpu_id = 1 if ubuntu else 0
+# torch.cuda.set_device(gpu_id)
+# torch.manual_seed(0)
+device = TRXConfig().device
 
 
 if __name__ == "__main__":
@@ -46,11 +47,10 @@ if __name__ == "__main__":
         os.mkdir(checkpoints_path)
 
     # Get model
-    model = TRXOS(args).cuda(device)
-    model.train()
+    model = TRXOS(args).to(device)
 
     # Create dataset iterator
-    train_data = EpisodicLoader(args.data_path, k=args.way, n_task=10000 if ubuntu else 100, input_type=args.input_type)
+    train_data = EpisodicLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type,)
 
     # Divide dataset into train and validation
     classes = train_data.classes
@@ -69,7 +69,7 @@ if __name__ == "__main__":
                                                shuffle=True)
 
     # Create optimizer and scheduler
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-2)
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.initial_lr)
     optimizer.zero_grad()
     scheduler = MultiStepLR(optimizer, milestones=[args.first_mile, args.second_mile],
                             gamma=0.1)
@@ -82,6 +82,7 @@ if __name__ == "__main__":
     # Log
     print("Train samples: {}".format(len(train_loader)))
     print("Training for {} epochs".format(args.n_epochs))
+    print("Batch size is {}".format(args.batch_size))
 
     # Losses
     os_loss_fn = torch.nn.BCELoss()
@@ -98,21 +99,32 @@ if __name__ == "__main__":
         # TRAIN
         model.train()
         torch.set_grad_enabled(True)
+        # first = None  # TODO REMOVE DEBUG
         for i, elem in enumerate(tqdm(train_loader)):
 
-            support_set = elem['support_set']
-            target_set = elem['target_set']
-            unknown_set = elem['unknown_set']
+            # if first is None:  # TODO REMOVE DEBUG
+            #     first = elem  # TODO REMOVE DEBUG
+            # elem = first  # TODO REMOVE DEBUG
+
+            support_set = elem['support_set'].float().to(device)
+            target_set = elem['target_set'].float().to(device)
+            unknown_set = elem['unknown_set'].float().to(device)
 
             batch_size = support_set.size(0)
 
-            support_set = support_set.reshape(batch_size, args.way, args.seq_len, args.n_joints * 3).cuda().float()
-            target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-            unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-            support_labels = torch.arange(args.way).repeat(batch_size).reshape(batch_size, args.way).cuda().int()
+            # TODO START MOVE IN DATALOADER
+            # support_set = support_set.reshape(batch_size, args.way, args.seq_len, args.n_joints * 3).cuda().float()
+            # target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
+            # unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
+            support_set = torch.permute(support_set, (0, 1, 2, 5, 3, 4))
+            target_set = torch.permute(target_set, (0, 1, 4, 2, 3))
+            unknown_set = torch.permute(unknown_set, (0, 1, 4, 2, 3))
+            # TODO END MOVE IN DATALOADER
+
+            support_labels = torch.arange(args.way).repeat(batch_size).reshape(batch_size, args.way).to(device).int()
             target = np.array(elem['support_classes']).T == \
                      np.repeat(np.array(elem['target_class']), 5).reshape(batch_size, args.way)
-            target = torch.FloatTensor(target).cuda()
+            target = torch.FloatTensor(target).to(device)
 
             ################
             # Known action #
@@ -128,49 +140,66 @@ if __name__ == "__main__":
             train_accuracy = torch.eq(torch.argmax(fs_pred, dim=1), torch.argmax(target, dim=1)).float().mean().item()
             fs_train_accuracies.append(train_accuracy)
 
+            print("Loss is", known_fs_loss.item(), "out is", fs_pred.detach().cpu().numpy())
+
             if epoch > args.start_discriminator_after_epoch:
                 # OS known (target depends on true class)
                 os_pred = out['is_true']
                 target = torch.eq(torch.argmax(fs_pred, dim=1), torch.argmax(target, dim=1)).float().unsqueeze(-1)
                 # Train only on correct prediction
-                true_s = (target == 1.).nonzero(as_tuple=True)[0]
-                n = len(true_s)
-                os_pred = os_pred[true_s]
-                target = target[true_s]
+                # true_s = (target == 1.).nonzero(as_tuple=True)[0]
+                # n = len(true_s)
+                # os_pred = os_pred[true_s]
+                # target = target[true_s]
+                if target.item() == 1:  # TODO do something like this to train discriminator with batch size = 1
+                    known_os_loss = os_loss_fn(os_pred, target)
+                    os_train_true.append(target.cpu().numpy())
+                    os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
+                    os_train_losses.append(known_os_loss.item())
 
-                known_os_loss = os_loss_fn(os_pred, target)
-                os_train_true.append(target.cpu().numpy())
-                os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
-                os_train_losses.append(known_os_loss.item())
+                    # TODO EXPERIMENT TO TRAIN RGB
+                    known_os_loss.backward()
+                    if i % args.optimize_every == 0:
+                        optimizer.step()
+                        optimizer.zero_grad()
+                    # TODO END EXPERIMENT TO TRAIN RGB
 
-                ##################
-                # Unknown action #
-                ##################
-                out = model(support_set, support_labels, unknown_set)
+                    ##################
+                    # Unknown action #
+                    ##################
+                    out = model(support_set, support_labels, unknown_set)
 
-                # OS unknown
-                os_pred = out['is_true']
-                target = torch.zeros_like(os_pred)
-                # Get n samples
-                os_pred = os_pred[:n]
-                target = target[:n]
+                    # OS unknown
+                    os_pred = out['is_true']
+                    target = torch.zeros_like(os_pred)
+                    # Get n samples
+                    # os_pred = os_pred[:n]
+                    # target = target[:n]
 
-                unknown_os_loss = os_loss_fn(os_pred, target)
-                os_train_losses.append(unknown_os_loss.item())
-                os_train_true.append(target.cpu().numpy())
-                os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
+                    unknown_os_loss = os_loss_fn(os_pred, target)
+                    os_train_losses.append(unknown_os_loss.item())
+                    os_train_true.append(target.cpu().numpy())
+                    os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
+
+                    # TODO EXPERIMENT TO TRAIN RGB
+                    unknown_os_loss.backward()
+                    if i % args.optimize_every == 0:
+                        optimizer.step()
+                        optimizer.zero_grad()
+                    # TODO END EXPERIMENT TO TRAIN RGB
 
                 final_loss = final_loss + known_os_loss + unknown_os_loss
             ############
             # Optimize #
             ############
-            final_loss.backward(retain_graph=True)
+            final_loss = final_loss / args.optimize_every
+            final_loss.backward()
 
             if i % args.optimize_every == 0:
                 optimizer.step()
                 optimizer.zero_grad()
 
-        scheduler.step()
+        scheduler.step()  # TODO READD IF NEEDED
 
         # WANDB
         os_train_true = np.concatenate(os_train_true, axis=None) if len(os_train_true) > 0 else np.zeros(1)
