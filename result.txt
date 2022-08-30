@@ -1,0 +1,3 @@
+[('use_a_fan_(with_hand_or_paper)-feeling_warm',), ('reach_into_pocket',), ('wipe_face',), ('put_on_headphone',), ('arm_circles',)] 
+ ['reach_into_pocket'] 
+ [[-5.3710117 -5.1696444 -8.215906  -8.314694  -8.337494 ]] 

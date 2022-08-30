@@ -1,4 +1,5 @@
 import cv2
+from torch import nn
 from tqdm import tqdm
 from modules.ar.utils.dataloader import EpisodicLoader
 from modules.ar.utils.model import TRXOS
@@ -39,16 +40,21 @@ if __name__ == "__main__":
     # Get model
     model = TRXOS(args).to(device)
     model.load_state_dict(torch.load('modules/ar/modules/raws/rgb/5000.pth')['model_state_dict'])
-    model.train()
     # TODO MAKE IT WORK IN EVAL MODE
-    # model.eval()
+    # model.train()
+    model.eval()
+    # count = 0
     # for m in model.modules():
-    #     if isinstance(m, nn.BatchNorm2d):
-    #         m.track_running_stats = False
+    #     if isinstance(m, torch.nn.BatchNorm2d):
+    #         count += 1  # skip the first BatchNorm layer in my ResNet50 based encoder
+    #         if count >= 2:
+    #             m.eval()
+    #             m.weight.requires_grad = False
+    #             m.bias.requires_grad = False
     # TODO MAKE IT WORK IN EVAL MODE
 
     # Create dataset iterator
-    train_data = EpisodicLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type, )
+    train_data = EpisodicLoader(args.data_path, k=args.way, n_task=100, input_type=args.input_type, )
 
     # Divide dataset into train and validation
     train_data.classes = test_classes
@@ -106,31 +112,31 @@ if __name__ == "__main__":
             train_accuracy = torch.eq(torch.argmax(fs_pred, dim=1), torch.argmax(target, dim=1)).float().mean().item()
             fs_train_accuracies.append(train_accuracy)
 
-            # TODO START VISUAL DEBUG
-            print(elem['support_classes'])
-            print(elem['target_class'])
-            print(out['logits'].detach().cpu().numpy())
-
-            support_set = (support_set.permute(0, 1, 2, 4, 5, 3) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
-            support_set = support_set.detach().cpu().numpy()
-            support_set = (support_set * 255).astype(int)
-            support_set = support_set[0].swapaxes(0, 1).reshape(8, 224*5, 224, 3).swapaxes(0, 1).reshape(5*224, 8*224, 3)
-
-            target_set = (target_set.permute(0, 1, 3, 4, 2) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
-            target_set = target_set.detach().cpu().numpy()
-            target_set = (target_set * 255).astype(int)
-            target_set = target_set[0].swapaxes(0, 1).reshape(224, -1, 3)
-
-            cv2.imwrite("support.png", support_set)
-            cv2.imwrite("target.png", target_set)
-            with open("result.txt", "w") as outfile:
-                outfile.write("%s \n %s \n %s \n" % (elem['support_classes'], elem['target_class'], out['logits'].detach().cpu().numpy()))
-            # cv2.imshow("support_set", support_set)
-            # cv2.imshow("target_set", target_set)
-            # cv2.waitKey(0)
-            # TODO END VISUAL DEBUG
-
-            input()
+            # # TODO START VISUAL DEBUG
+            # print(elem['support_classes'])
+            # print(elem['target_class'])
+            # print(out['logits'].detach().cpu().numpy())
+            #
+            # support_set = (support_set.permute(0, 1, 2, 4, 5, 3) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
+            # support_set = support_set.detach().cpu().numpy()
+            # support_set = (support_set * 255).astype(int)
+            # support_set = support_set[0].swapaxes(0, 1).reshape(8, 224*5, 224, 3).swapaxes(0, 1).reshape(5*224, 8*224, 3)
+            #
+            # target_set = (target_set.permute(0, 1, 3, 4, 2) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
+            # target_set = target_set.detach().cpu().numpy()
+            # target_set = (target_set * 255).astype(int)
+            # target_set = target_set[0].swapaxes(0, 1).reshape(224, -1, 3)
+            #
+            # cv2.imwrite("support.png", support_set)
+            # cv2.imwrite("target.png", target_set)
+            # with open("result.txt", "w") as outfile:
+            #     outfile.write("%s \n %s \n %s \n" % (elem['support_classes'], elem['target_class'], out['logits'].detach().cpu().numpy()))
+            # # cv2.imshow("support_set", support_set)
+            # # cv2.imshow("target_set", target_set)
+            # # cv2.waitKey(0)
+            # # TODO END VISUAL DEBUG
+            #
+            # input()
 
             # print("Loss is", known_fs_loss.item(), "out is", fs_pred.detach().cpu().numpy(), "target:", target.detach().cpu().numpy())
 
