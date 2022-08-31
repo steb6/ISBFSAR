@@ -340,6 +340,8 @@ class ISBFSAR:
             self.ar.support_labels = pkl.load(pkl_file)
         with open('assets/saved/requires_focus.pkl', 'rb') as pkl_file:
             self.ar.requires_focus = pkl.load(pkl_file)
+        self.ar.n_classes = len(list(filter(lambda x: x is not None, self.ar.support_labels)))
+        print("Loaded", self.ar.n_classes, "classes")
 
 
 def run_module(module, configurations, input_queue, output_queue):

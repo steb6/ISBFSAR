@@ -1,5 +1,7 @@
+import vispy.scene.visuals
 from vispy import app, scene, visuals
-from vispy.scene.visuals import Text, Image
+from vispy.color import Colormap
+from vispy.scene.visuals import Text, Image, ColorBar
 import numpy as np
 import math
 
@@ -85,6 +87,7 @@ class VISPYVisualizer:
         self.b2.add(self.is_same_action)
         self.b2.add(self.fps)
         self.actions = {}
+        self.values = {}
 
         # Image
         b3 = grid.add_view(row=1, col=0)
@@ -166,7 +169,6 @@ class VISPYVisualizer:
             m = max(results.values()) if len(results) > 0 else 0  # Just max
             for i, r in enumerate(results.keys()):
                 score = results[r]
-                requires_box = False
                 requires_focus = False
                 # Check if conditions are satisfied
                 if score == m:
@@ -192,21 +194,23 @@ class VISPYVisualizer:
                 else:
                     color = "red"
                 if r in self.actions.keys():
-                    text = "{}: {:.2f}".format(r, score)
+                    text = r  # {:.2f}".format(r, score)
                     if requires_focus:
                         text += ' (0_0)'
-                    # if requires_box:
-                    #     text += ' [ ]'
-                    # if requires_box is not None and not requires_box:
-                    #     text += ' [X]'
                     self.actions[r].text = text
                 else:
                     self.actions[r] = Text('', rotation=0, anchor_x="center", anchor_y="bottom", font_size=12)
+                    self.values[r] = ColorBar(Colormap(['r', 'g']), "top", (0.5, 0.05), clim=("", ""))
                     self.b2.add(self.actions[r])
-                self.actions[r].pos = 0.5, 0.7 - (0.1 * i)
-                self.actions[r].color = color
+                    self.b2.add(self.values[r])
 
-                # self.is_same_action.pos = 4
+                bar_height = 0.075
+                self.values[r].label = "{:.2f}".format(score)
+                self.values[r].pos = 0.5 + (score/4 if score/2 > bar_height else bar_height/2), \
+                                     0.7 - (0.1 * i) - bar_height/2
+                self.values[r].size = (score/2 if score/2 > bar_height else bar_height, bar_height)
+                self.actions[r].pos = 0.25, 0.7 - (0.1 * i)
+                self.actions[r].color = color
 
             # Remove erased action (if any)
             to_remove = []
@@ -215,7 +219,9 @@ class VISPYVisualizer:
                     to_remove.append(key)
             for key in to_remove:
                 self.actions[key].parent = None
+                self.values[key].parent = None
                 self.actions.pop(key)
+                self.values.pop(key)
 
     def on_draw(self, event):
         pass
