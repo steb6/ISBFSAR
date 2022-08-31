@@ -14,6 +14,8 @@ from utils.matplotlib_visualizer import MPLPosePrinter
 class HumanPoseEstimator:
     def __init__(self, model_config, cam_config):
 
+        self.just_box = model_config.just_box
+
         self.yolo_thresh = model_config.yolo_thresh
         self.nms_thresh = model_config.nms_thresh
         self.num_aug = model_config.num_aug
@@ -48,9 +50,10 @@ class HumanPoseEstimator:
 
         # Load modules
         self.yolo = Runner(model_config.yolo_engine_path)
-        self.image_transformation = Runner(model_config.image_transformation_path)
-        self.bbone = Runner(model_config.bbone_engine_path)
-        self.heads = Runner(model_config.heads_engine_path)
+        if not self.just_box:
+            self.image_transformation = Runner(model_config.image_transformation_path)
+            self.bbone = Runner(model_config.bbone_engine_path)
+            self.heads = Runner(model_config.heads_engine_path)
 
     def estimate(self, frame):
 
@@ -77,13 +80,18 @@ class HumanPoseEstimator:
             humans.sort(key=lambda x: x[4], reverse=True)  # Sort with decreasing probability
             human = humans[0]
         else:
-            return None, None, None
+            return None
 
         # Preprocess for BackBone
         x1 = int(human[0] * frame.shape[1]) if int(human[0] * frame.shape[1]) > 0 else 0
         y1 = int(human[1] * frame.shape[0]) if int(human[1] * frame.shape[0]) > 0 else 0
         x2 = int(human[2] * frame.shape[1]) if int(human[2] * frame.shape[1]) > 0 else 0
         y2 = int(human[3] * frame.shape[0]) if int(human[3] * frame.shape[0]) > 0 else 0
+
+        # If we are doing rgb inference, we need just the box
+        if self.just_box:
+            return x1, y1, x2, y2
+
         new_K, homo_inv = homography(x1, x2, y1, y2, self.K, 256)
 
         # Test time augmentation TODO ADD GAMMA DECODING
@@ -155,7 +163,7 @@ class HumanPoseEstimator:
 
         # If less than 1/4 of the joints is visible, then the resulting pose will be weird
         if is_predicted_to_be_in_fov.sum() < is_predicted_to_be_in_fov.size/4:
-            return None, None, None
+            return None
 
         # Move the skeleton into estimated absolute position if necessary  # TODO fIX
         pred3d = reconstruct_absolute(pred2d, pred3d, new_K[None, ...], is_predicted_to_be_in_fov, weak_perspective=False)

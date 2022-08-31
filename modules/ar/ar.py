@@ -17,10 +17,12 @@ class ActionRecognizer:
         self.ar.cuda()
         self.ar.eval()
 
-        shape = (args.way, args.seq_len, args.n_joints * 3) if self.input_type == "skeleton" else (args.way, args.seq_len, 3, 224, 224)
+        shape = (args.way, args.seq_len, args.n_joints * 3) if self.input_type == "skeleton" else (
+        args.way, args.seq_len, 3, 224, 224)
         self.support_set = torch.zeros(shape).float()
         self.previous_frames = []
-        self.support_labels = []
+        self.support_labels = [None for _ in range(args.way)]
+        self.n_classes = 0
         self.seq_len = args.seq_len
         self.way = args.way
         self.n_joints = args.n_joints if args.input_type == "skeleton" else 0
@@ -33,7 +35,7 @@ class ActionRecognizer:
         if pose_or_img is None:
             return {}, 0
 
-        if len(self.support_labels) == 0:  # no class to predict
+        if self.n_classes == 0:  # no class to predict
             return {}, 0
 
         pose_or_img = torch.FloatTensor(pose_or_img).cuda()
@@ -56,12 +58,10 @@ class ActionRecognizer:
         open_set_result = outputs['is_true'].squeeze(0).detach().cpu().numpy()
 
         results = {}  # return output as dictionary
-        predicted = few_shot_result[:len(self.support_labels)]
-        for k in range(len(predicted)):
-            if k < len(self.support_labels):
+        predicted = few_shot_result
+        for k in range(self.way):
+            if self.support_labels[k] is not None:
                 results[self.support_labels[k]] = (predicted[k])
-            else:
-                results['Action_{}'.format(k)] = (predicted[k])
         return results, open_set_result
 
     def sim(self, action1, action2):
@@ -72,9 +72,10 @@ class ActionRecognizer:
         flag: Str
         """
         index = self.support_labels.index(flag)
-        self.support_labels.remove(flag)
+        self.support_labels[index] = None
         self.support_set[index] = torch.zeros_like(self.support_set[index])
         self.requires_focus[index] = False
+        self.n_classes -= 1
 
     def debug(self):
         with open('assets/skeleton_types.pkl', "rb") as inp:
@@ -89,12 +90,13 @@ class ActionRecognizer:
         raw: Tuple ( FloatTensor Nx30x3, Str)
         """
         if raw is not None:  # if some data are given
-            # Convert raw
-            x = torch.FloatTensor(raw[0]).cuda()
-            if raw[1] not in self.support_labels and len(self.support_labels) < self.way:
-                self.support_labels.append(raw[1])
-            y = int(self.support_labels.index(raw[1]))
-            self.support_set[y] = x
+            if raw[1] not in self.support_labels and self.n_classes < self.way:
+                for index in range(self.way):
+                    if self.support_labels[index] is None:
+                        break
+                self.support_labels[index] = raw[1]
+                self.support_set[index] = torch.FloatTensor(raw[0]).cuda()
+                self.n_classes += 1
 
 
 if __name__ == "__main__":

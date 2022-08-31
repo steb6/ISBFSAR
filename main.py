@@ -3,18 +3,16 @@ from modules.focus.gaze_estimation.focus import FocusDetector
 # from modules.focus.mutual_gaze.focus import FocusDetector
 import os
 import numpy as np
-from tqdm import tqdm
 import time
 from modules.ar.ar import ActionRecognizer
 import cv2
 from playsound import playsound
-from utils.input import RealSense, just_text
+from utils.input import RealSense
 from modules.hpe.hpe import HumanPoseEstimator
 from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig, FocusConfig
 from utils.params import TRXConfig
 from utils.output import VISPYVisualizer
 from multiprocessing import Process, Queue
-from threading import Thread
 
 
 class ISBFSAR:
@@ -29,13 +27,12 @@ class ISBFSAR:
                                                            self.focus_in, self.focus_out))
         self.focus_proc.start()
 
-        if self.input_type == "skeleton":
-            self.hpe_in = Queue(1)
-            self.hpe_out = Queue(1)
-            self.hpe_proc = Process(target=run_module, args=(HumanPoseEstimator,
-                                                             (MetrabsTRTConfig(), RealSenseIntrinsics()),
-                                                             self.hpe_in, self.hpe_out))
-            self.hpe_proc.start()
+        self.hpe_in = Queue(1)
+        self.hpe_out = Queue(1)
+        self.hpe_proc = Process(target=run_module, args=(HumanPoseEstimator,
+                                                         (MetrabsTRTConfig(), RealSenseIntrinsics()),
+                                                         self.hpe_in, self.hpe_out))
+        self.hpe_proc.start()
 
         self.ar = ActionRecognizer(TRXConfig())
 
@@ -65,10 +62,7 @@ class ISBFSAR:
         self.skeleton_scale = args.skeleton_scale
 
         # Create input
-        # TODO IF I USE PROCESS IT WORKS BUT EXCEPT, WITH THREADS IT DOESNT WORK
         self.input_queue = Queue(1)
-        # self.input_proc = Process(target=just_text, args=(self.input_queue,))
-        # self.input_proc.start()
 
         # Create output
         self.visualizer = visualizer
@@ -93,11 +87,14 @@ class ISBFSAR:
         self.focus_in.put(img)
 
         # AR ############################################################
-        # TODO EXTRACT HUMAN BOUNDING BOX
-        if self.input_type == "skeleton":
-            self.hpe_in.put(img)
+        self.hpe_in.put(img)
 
-            pose3d_abs, edges, bbox = self.hpe_out.get()
+        if self.input_type == "skeleton":
+            h = self.hpe_out.get()
+            if h is not None:
+                pose3d_abs, edges, bbox = h
+            else:
+                pose3d_abs, edges, bbox = None, None, None
 
             # Compute distance
             d = None
@@ -108,18 +105,31 @@ class ISBFSAR:
 
             # Normalize
             pose3d_root = pose3d_abs - pose3d_abs[0, :] if pose3d_abs is not None else None
-            # pose = pose / self.skeleton_scale  # Normalize  (MetrABS is a cube with sides of 2.2 M)
             ar_input = pose3d_root
-        else:
+
+        else:  # RGB case
+            h = self.hpe_out.get()
+            if h is not None:
+                x1, y1, x2, y2 = h
+                xm = int((x1 + x2) / 2)
+                ym = int((y1 + y2) / 2)
+                l = max(xm - x1, ym - y1)
+                ar_input = img[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
+                ar_input = cv2.resize(ar_input, (224, 224))
+                cv2.imshow("AR_INPUT", ar_input)  # TODO REMOVE DEBUG
+                cv2.waitKey(1)  # TODO REMOVE DEBUG
+                ar_input = ar_input / 255.
+                ar_input = ar_input * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
+                ar_input = ar_input.swapaxes(-1, -3).swapaxes(-1, -2)
+                bbox = x1, x2, y1, y2
+            else:
+                ar_input = None
+                bbox = None
             pose3d_root = None
-            bbox = None
             edges = None
             d = None
-            ar_input = img
 
         # Make inference
-        ar_input = cv2.resize(ar_input, (224, 224))  # TODO REMOVE, CROP HUMAN
-        ar_input = ar_input.swapaxes(-1, -3).swapaxes(-1, -2)
         results = self.ar.inference(ar_input)
         actions, is_true = results
 
@@ -157,7 +167,7 @@ class ISBFSAR:
                         }
             self.output_queue.put((elements,))
 
-        return img, pose3d_root, results
+        return ar_input, pose3d_root, results
 
     def log(self, msg):
         self.output_queue.put(({"log": msg},))
@@ -165,7 +175,6 @@ class ISBFSAR:
 
     def run(self):
         while True:
-        # for _ in tqdm(list(range(10000))):
             # We received a command
             if not self.input_queue.empty():
                 msg = self.input_queue.get()
@@ -196,34 +205,11 @@ class ISBFSAR:
             elif msg[0] == "load":
                 self.load()
 
-            elif msg[0] == "sim":
-                self.sim(msg[1], msg[2])
-
-            elif msg[0] == "test_dir":  # TODO REMOVE DEBUG
-                self.test_dir(msg[1])  # TODO REMOVE DEBUG
+            elif msg[0] == "debug":
+                self.debug()
 
             else:
                 self.log("Not a valid command!")
-
-        # clean  # TODO TERMINATE THREADS
-        self.input_proc.join()
-        self.output_proc.join()
-
-    # TODO REMOVE DEBUG
-    def test_dir(self, path):
-        poses = []
-        for i in range(16):
-            img = cv2.imread(os.path.join(path, "img_{}.png".format(i)))
-            _, pose, _ = self.get_frame(img)
-            poses.append(pose)
-
-        poses = np.stack(poses)
-        for pose in poses:
-            results = self.ar.inference(pose)
-            actions, is_true = results
-            print(actions)
-            print(is_true)
-    # TODO END REMOVE DEBUG
 
     def test_video(self, path):
         if not os.path.exists(path):
@@ -256,14 +242,19 @@ class ISBFSAR:
     def forget_command(self, flag):
         self.ar.remove(flag)
 
+    def debug(self):
+        support_set = self.ar.support_set
+        support_set = support_set.detach().cpu().numpy().swapaxes(-2, -3).swapaxes(-1, -2)
+        support_set = (support_set - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
+        # support_set = support_set.swapaxes(-1, -2).swapaxes(-2, -3)
+        support_set = (support_set * 255).astype(np.uint8)
+        support_set = support_set.swapaxes(0, 1).reshape(8, 224*5, 224, 3).swapaxes(0, 1).reshape(5*224, 8*224, 3)
+        cv2.imshow("support_set", support_set)
+        cv2.waitKey(1)
+
     def learn_command(self, flag):
         # If a string is provided
         requires_focus = "-focus" in flag
-        requires_box = None
-        if "-box" in flag:
-            requires_box = True
-        if "-nobox" in flag:
-            requires_box = False
         if '.' not in flag[0]:
             flag = flag[0]
 
@@ -277,15 +268,20 @@ class ISBFSAR:
             poses = []
             imgs = []
             i = 0
-            while len(poses if self.input_type == "skeleton" else imgs) < self.window_size:
+            off_time = 3000 / self.window_size
+            while True:
+                start = time.time()
+                if len(poses if self.input_type == "skeleton" else imgs) == self.window_size:
+                    break
                 img, pose, _ = self.get_frame()
-                img = cv2.resize(img, (224, 224))  # TODO CROP THE HUMAN FROM THE IMAGE
-                img = img.swapaxes(-1, -3).swapaxes(-1, -2)
                 imgs.append(img)
                 if pose is not None:
                     poses.append(pose)
                 self.log("{:.2f}%".format((i / (self.window_size - 1)) * 100))
                 i += 1
+                while (time.time() - start)*1000 < off_time:
+                    continue
+
             data = np.stack(poses if self.input_type == "skeleton" else imgs)
             playsound('assets' + os.sep + 'stop.wav')
             self.log("100%")
@@ -325,25 +321,6 @@ class ISBFSAR:
             data = data[:(len(data) - (len(data) % self.window_size))]
             data = data[list(range(0, len(data), int(len(data) / self.window_size)))]
 
-        # # TODO SAVE POSE AND
-        # import pickle
-        # out_dir = "testing"
-        # skeleton = 'smpl+head_30'
-        # with open('assets/skeleton_types.pkl', "rb") as input_file:
-        #     skeleton_types = pickle.load(input_file)
-        # edges = skeleton_types[skeleton]['edges']
-        # from utils.matplotlib_visualizer import MPLPosePrinter
-        # vis = MPLPosePrinter()
-        # os.mkdir(os.path.join("imgs", flag))
-        # for i, img in enumerate(imgs):
-        #     img = img[::-1, :, ::-1]
-        #     cv2.imwrite(os.path.join("imgs", flag, f"img_{i}.png"), img)
-        # for j, pose in enumerate(poses):
-        #     vis.clear()
-        #     vis.print_pose(pose.reshape(-1, 3), edges)
-        #     vis.save(os.path.join("imgs", flag, f"pose_{j}.png"))
-        #     vis.sleep(0.01)
-        # # TODO END
         self.log("Success!")
         data = (data, flag)
         self.ar.train(data)
@@ -355,10 +332,6 @@ class ISBFSAR:
             pkl.dump(self.ar.support_labels, outfile)
         with open('assets/saved/requires_focus.pkl', 'wb') as outfile:
             pkl.dump(self.ar.requires_focus, outfile)
-        with open('assets/saved/requires_box.pkl', 'wb') as outfile:
-            pkl.dump(self.ar.requires_box, outfile)
-        with open('assets/saved/sim.pkl', 'wb') as outfile:
-            pkl.dump(self.ar.similar_actions, outfile)
 
     def load(self):
         with open('assets/saved/support_set.pkl', 'rb') as pkl_file:
@@ -367,13 +340,6 @@ class ISBFSAR:
             self.ar.support_labels = pkl.load(pkl_file)
         with open('assets/saved/requires_focus.pkl', 'rb') as pkl_file:
             self.ar.requires_focus = pkl.load(pkl_file)
-        with open('assets/saved/requires_box.pkl', 'rb') as pkl_file:
-            self.ar.requires_box = pkl.load(pkl_file)
-        with open('assets/saved/sim.pkl', 'rb') as pkl_file:
-            self.ar.similar_actions = pkl.load(pkl_file)
-
-    def sim(self, action1, action2):
-        self.ar.sim(action1, action2)
 
 
 def run_module(module, configurations, input_queue, output_queue):

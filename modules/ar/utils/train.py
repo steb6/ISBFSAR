@@ -158,10 +158,10 @@ if __name__ == "__main__":
                     os_train_losses.append(known_os_loss.item())
 
                     # TODO EXPERIMENT TO TRAIN RGB
-                    known_os_loss.backward()
-                    if i % args.optimize_every == 0:
-                        optimizer.step()
-                        optimizer.zero_grad()
+                    # known_os_loss.backward()
+                    # if i % args.optimize_every == 0:
+                    #     optimizer.step()
+                    #     optimizer.zero_grad()
                     # TODO END EXPERIMENT TO TRAIN RGB
 
                     ##################
@@ -182,13 +182,13 @@ if __name__ == "__main__":
                     os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
 
                     # TODO EXPERIMENT TO TRAIN RGB
-                    unknown_os_loss.backward()
-                    if i % args.optimize_every == 0:
-                        optimizer.step()
-                        optimizer.zero_grad()
+                    # unknown_os_loss.backward()
+                    # if i % args.optimize_every == 0:
+                    #     optimizer.step()
+                    #     optimizer.zero_grad()
                     # TODO END EXPERIMENT TO TRAIN RGB
 
-                final_loss = final_loss + known_os_loss + unknown_os_loss
+                    final_loss = final_loss + known_os_loss + unknown_os_loss
             ############
             # Optimize #
             ############

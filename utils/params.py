@@ -31,6 +31,7 @@ class MetrabsTRTConfig(object):
         self.yolo_thresh = 0.3
         self.nms_thresh = 0.7
         self.num_aug = 0  # if zero, disables test time augmentation
+        self.just_box = input_type == "rgb"
 
 
 class RealSenseIntrinsics(object):
@@ -69,7 +70,7 @@ class TRXConfig(object):
         self.optimize_every = 16  # Put to 1 if not used, not 0 or -1!
         self.batch_size = 1 if not ubuntu else (32 if self.input_type == "skeleton" else 1)
         self.n_epochs = 10000
-        self.start_discriminator_after_epoch = self.n_epochs  # TODO CAREFUL
+        self.start_discriminator_after_epoch = 0  # self.n_epochs  # TODO CAREFUL
         self.first_mile = self.n_epochs  # 15 TODO CAREFUL
         self.second_mile = self.n_epochs  # 1500 TODO CAREFUL
         self.n_workers = 0 if not ubuntu else 20
@@ -84,7 +85,7 @@ class TRXConfig(object):
         self.checkpoints_path = "checkpoints"
 
         # DEPLOYMENT
-        self.final_ckpt_path = "modules/ar/modules/raws/DISC.pth" if self.input_type == "skeleton" else "modules/ar/modules/raws/rgb/5000.pth"
+        self.final_ckpt_path = "modules/ar/modules/raws/DISC.pth" if self.input_type == "skeleton" else "modules/ar/modules/raws/rgb/3000.pth"
         self.trt_path = 'modules/ar/modules/{}/trx.engine'.format(engine_dir)
         self.seq_len = seq_len
 
