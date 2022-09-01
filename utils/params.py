@@ -68,7 +68,7 @@ class TRXConfig(object):
         self.initial_lr = 1e-2 if self.input_type == "skeleton" else 1e-3
         self.n_task = (100 if self.input_type == "skeleton" else 30) if not ubuntu else (10000 if self.input_type == "skeleton" else 100)
         self.optimize_every = 16  # Put to 1 if not used, not 0 or -1!
-        self.batch_size = 1 if not ubuntu else (32 if self.input_type == "skeleton" else 1)
+        self.batch_size = 1 if not ubuntu else (32 if self.input_type == "skeleton" else 4)
         self.n_epochs = 10000
         self.start_discriminator_after_epoch = 0  # self.n_epochs  # TODO CAREFUL
         self.first_mile = self.n_epochs  # 15 TODO CAREFUL
@@ -80,7 +80,7 @@ class TRXConfig(object):
         self.trans_linear_out_dim = 128
         self.query_per_class = 1
         self.trans_dropout = 0.
-        self.num_gpus = 1
+        self.num_gpus = 4
         self.temp_set = [2]
         self.checkpoints_path = "checkpoints"
 

@@ -3,7 +3,8 @@ import torch
 from torch import nn
 from itertools import combinations
 from torch.autograd import Variable
-from torchvision.models import resnet50
+from torchvision.models import resnet50, ResNet
+from torchvision.models.resnet import Bottleneck
 
 NUM_SAMPLES = 1
 
@@ -197,6 +198,45 @@ class Discriminator(torch.nn.Module):
 
 
 class TRXOS(nn.Module):
+
+    class myresnet50(ResNet):
+        def __init__(self, pretrained=True):
+            super().__init__(Bottleneck, [3, 4, 6, 3])
+            self.gradients = None
+            self.activations = []
+
+        def activations_hook(self, grad):
+            self.gradients = grad
+
+        # method for the gradient extraction
+        def get_activations_gradient(self):
+            return self.gradients
+
+        # method for the activation exctraction
+        def get_activations(self):
+            return self.activations
+
+        def forward(self, x):
+            # See note [TorchScript super()]
+            x = self.conv1(x)
+            x = self.bn1(x)
+            x = self.relu(x)
+            x = self.maxpool(x)
+
+            x = self.layer1(x)
+            x = self.layer2(x)
+            x = self.layer3(x)
+            x = self.layer4(x)
+
+            h = x.register_hook(self.activations_hook)
+            self.activations.append(x.detach())
+
+            x = self.avgpool(x)
+            x = torch.flatten(x, 1)
+            x = self.fc(x)
+
+            return x
+
     def __init__(self, args):
         super(TRXOS, self).__init__()
         self.args = args
@@ -206,7 +246,7 @@ class TRXOS(nn.Module):
             self.features_extractor = MLP(args.n_joints * 3,
                                           args.n_joints * 3 * 2, self.trans_linear_in_dim)
         if args.input_type == "rgb":
-            self.features_extractor = resnet50(pretrained=True)
+            self.features_extractor = self.myresnet50(pretrained=True)
 
         self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s) for s in args.temp_set])
 
@@ -245,9 +285,9 @@ class TRXOS(nn.Module):
         :return: Nothing
         """
         if self.args.num_gpus > 1:
-            self.resnet.cuda(0)
-            self.resnet = torch.nn.DataParallel(self.resnet, device_ids=[i for i in range(0, self.args.num_gpus)])
-            self.transformers.cuda(0)
+            self.features_extractor.cuda(0)
+            self.features_extractor = torch.nn.DataParallel(self.features_extractor, device_ids=[i for i in range(0, self.args.num_gpus)])
+            self.features_extractor.cuda(0)
 
 
 if __name__ == "__main__":

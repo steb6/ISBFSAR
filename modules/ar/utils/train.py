@@ -48,6 +48,7 @@ if __name__ == "__main__":
 
     # Get model
     model = TRXOS(args).to(device)
+    model.distribute_model()  # TODO TEST
 
     # Create dataset iterator
     train_data = EpisodicLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type,)
@@ -95,6 +96,7 @@ if __name__ == "__main__":
         os_train_losses = []
         os_train_pred = []
         os_train_true = []
+        os_outs = []
 
         # TRAIN
         model.train()
@@ -140,18 +142,20 @@ if __name__ == "__main__":
             train_accuracy = torch.eq(torch.argmax(fs_pred, dim=1), torch.argmax(target, dim=1)).float().mean().item()
             fs_train_accuracies.append(train_accuracy)
 
-            print("Loss is", known_fs_loss.item(), "out is", fs_pred.detach().cpu().numpy())
+            # print("Loss is", known_fs_loss.item(), "out is", fs_pred.detach().cpu().numpy())
 
             if epoch > args.start_discriminator_after_epoch:
                 # OS known (target depends on true class)
                 os_pred = out['is_true']
+                os_outs.append(os_pred.detach().cpu().numpy())
                 target = torch.eq(torch.argmax(fs_pred, dim=1), torch.argmax(target, dim=1)).float().unsqueeze(-1)
                 # Train only on correct prediction
-                # true_s = (target == 1.).nonzero(as_tuple=True)[0]
-                # n = len(true_s)
-                # os_pred = os_pred[true_s]
-                # target = target[true_s]
-                if target.item() == 1:  # TODO do something like this to train discriminator with batch size = 1
+                true_s = (target == 1.).nonzero(as_tuple=True)[0]
+                n = len(true_s)
+                os_pred = os_pred[true_s]
+                target = target[true_s]
+
+                if target.sum() > 0:  # TODO do something like this to train discriminator with batch size = 1
                     known_os_loss = os_loss_fn(os_pred, target)
                     os_train_true.append(target.cpu().numpy())
                     os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
@@ -171,10 +175,11 @@ if __name__ == "__main__":
 
                     # OS unknown
                     os_pred = out['is_true']
+                    os_outs.append(os_pred.detach().cpu().numpy())
                     target = torch.zeros_like(os_pred)
                     # Get n samples
-                    # os_pred = os_pred[:n]
-                    # target = target[:n]
+                    os_pred = os_pred[:n]
+                    target = target[:n]
 
                     unknown_os_loss = os_loss_fn(os_pred, target)
                     os_train_losses.append(unknown_os_loss.item())
@@ -215,7 +220,8 @@ if __name__ == "__main__":
                        "train/os_f1": f1_score(os_train_true, os_train_pred, zero_division=0),
                        "train/os_n_1_true": os_train_true.mean(),
                        "train/os_n_1_pred": os_train_pred.mean(),
-                       "lr": optimizer.param_groups[0]['lr']})
+                       "lr": optimizer.param_groups[0]['lr'],
+                       "os_outs": wandb.Histogram(np.concatenate(os_outs, axis=0)) if len(os_outs) > 0 else [0]})
 
         torch.save({'epoch': epoch,
                     'model_state_dict': model.state_dict(),

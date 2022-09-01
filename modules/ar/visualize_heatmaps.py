@@ -1,5 +1,3 @@
-import cv2
-from torch import nn
 from tqdm import tqdm
 from modules.ar.utils.dataloader import EpisodicLoader
 from modules.ar.utils.model import TRXOS
@@ -11,8 +9,7 @@ from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
 import numpy as np
 import torch
-
-# srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
+import cv2
 
 gpu_id = 1 if ubuntu else 0
 torch.cuda.set_device(gpu_id)
@@ -40,18 +37,7 @@ if __name__ == "__main__":
     # Get model
     model = TRXOS(args).to(device)
     model.load_state_dict(torch.load('modules/ar/modules/raws/rgb/5000.pth')['model_state_dict'])
-    # TODO MAKE IT WORK IN EVAL MODE
-    # model.train()
     model.eval()
-    # count = 0
-    # for m in model.modules():
-    #     if isinstance(m, torch.nn.BatchNorm2d):
-    #         count += 1  # skip the first BatchNorm layer in my ResNet50 based encoder
-    #         if count >= 2:
-    #             m.eval()
-    #             m.weight.requires_grad = False
-    #             m.bias.requires_grad = False
-    # TODO MAKE IT WORK IN EVAL MODE
 
     # Create dataset iterator
     train_data = EpisodicLoader(args.data_path, k=args.way, n_task=100, input_type=args.input_type, )
@@ -119,23 +105,20 @@ if __name__ == "__main__":
         # print(elem['target_class'])
         # print(out['logits'].detach().cpu().numpy())
         #
-        # support_set = (support_set.permute(0, 1, 2, 4, 5, 3) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
-        # support_set = support_set.detach().cpu().numpy()
-        # support_set = (support_set * 255).astype(int)
-        # support_set = support_set[0].swapaxes(0, 1).reshape(8, 224*5, 224, 3).swapaxes(0, 1).reshape(5*224, 8*224, 3)
+        support_set = (support_set.permute(0, 1, 2, 4, 5, 3) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
+        support_set = support_set.detach().cpu().numpy()
+        support_set = (support_set * 255).astype(int)
+        support_set = support_set[0].swapaxes(0, 1).reshape(8, 224*5, 224, 3).swapaxes(0, 1).reshape(5*224, 8*224, 3)
         #
-        # target_set = (target_set.permute(0, 1, 3, 4, 2) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
-        # target_set = target_set.detach().cpu().numpy()
-        # target_set = (target_set * 255).astype(int)
-        # target_set = target_set[0].swapaxes(0, 1).reshape(224, -1, 3)
+        target_set = (target_set.permute(0, 1, 3, 4, 2) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
+        target_set = target_set.detach().cpu().numpy()
+        target_set = (target_set * 255).astype(int)
+        target_set = target_set[0].swapaxes(0, 1).reshape(224, -1, 3)
         #
         # cv2.imwrite("support.png", support_set)
         # cv2.imwrite("target.png", target_set)
         # with open("result.txt", "w") as outfile:
         #     outfile.write("%s \n %s \n %s \n" % (elem['support_classes'], elem['target_class'], out['logits'].detach().cpu().numpy()))
-        # # cv2.imshow("support_set", support_set)
-        # # cv2.imshow("target_set", target_set)
-        # # cv2.waitKey(0)
         # # TODO END VISUAL DEBUG
         #
         # input()
@@ -196,7 +179,30 @@ if __name__ == "__main__":
         # WANDB
 
         known_fs_loss.backward()  # To free memory
-        print("")
+        gradients = model.features_extractor.get_activations_gradient()
+        activations = model.features_extractor.get_activations()[0]
+
+        gradients = gradients.mean([2, 3])
+        for i in range(2048):
+            activations[:, i, :, :] *= gradients[:, i][..., None, None]
+
+        heatmap = torch.mean(activations, 1)
+        heatmap = np.maximum(heatmap.detach().cpu().numpy(), 0)
+
+        heatmap /= np.max(heatmap, axis=(1, 2), keepdims=True)
+
+        # draw the heatmap
+        import matplotlib.pyplot as plt
+        heatmap = heatmap.reshape(5, 8, 7, 7).swapaxes(0, 1).reshape(8, 5*7, 7).swapaxes(0, 1).reshape(5*7, 7*8)
+        heatmap = cv2.resize(heatmap, (support_set.shape[1], support_set.shape[0]))
+
+        # TODO FIX
+        focus = cv2.addWeighted(support_set, 0.7, heatmap[..., None].repeat(3, 2), 0.3, 0)
+
+        # cv2.imshow("support_set", support_set.astype(np.uint8))
+        cv2.imshow("target_set", target_set.astype(np.uint8))
+        # cv2.imshow("", heatmap)
+        cv2.waitKey(0)
 
     os_train_true = np.concatenate(os_train_true, axis=None) if len(os_train_true) > 0 else np.zeros(1)
     os_train_pred = np.concatenate(os_train_pred, axis=None) if len(os_train_pred) > 0 else np.zeros(1)
