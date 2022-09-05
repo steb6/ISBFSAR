@@ -33,9 +33,10 @@ if __name__ == "__main__":
         name = name.strip().replace(" ", "_").replace("/", "-").replace("’", "")
         class_dict[index] = name
     test_classes = [class_dict[elem] for elem in test_classes]
+    test_classes = list(np.sort(test_classes)[:11])  # TODO REMOVEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 
     # Get model
-    model = TRXOS(args).to(device)
+    model = TRXOS(args, add_hook=True).to(device)
     model.load_state_dict(torch.load('modules/ar/modules/raws/rgb/5000.pth')['model_state_dict'])
     model.eval()
 
@@ -181,12 +182,15 @@ if __name__ == "__main__":
         known_fs_loss.backward()  # To free memory
         gradients = model.features_extractor.get_activations_gradient()
         activations = model.features_extractor.get_activations()[0]
+        activations_target = model.features_extractor.get_activations()[1]
 
         gradients = gradients.mean([2, 3])
         for i in range(2048):
             activations[:, i, :, :] *= gradients[:, i][..., None, None]
+            # activations_target[:, i, :, :] *= gradients[:, i][..., None, None]
 
         heatmap = torch.mean(activations, 1)
+        # heatmap = -heatmap  # TODO TRY
         heatmap = np.maximum(heatmap.detach().cpu().numpy(), 0)
 
         heatmap /= np.max(heatmap, axis=(1, 2), keepdims=True)
@@ -197,12 +201,20 @@ if __name__ == "__main__":
         heatmap = cv2.resize(heatmap, (support_set.shape[1], support_set.shape[0]))
 
         # TODO FIX
-        focus = cv2.addWeighted(support_set, 0.7, heatmap[..., None].repeat(3, 2), 0.3, 0)
+        colormap = plt.get_cmap('inferno')
+        heatmap = (colormap(heatmap) * 2 ** 16).astype(np.uint16)[:, :, :3]
+        heatmap = cv2.cvtColor(heatmap, cv2.COLOR_RGB2BGR)
+        focus = cv2.addWeighted(((support_set / 255)  * 2 ** 16).astype(np.uint16), 0.5, heatmap, 0.5, 0)
 
-        # cv2.imshow("support_set", support_set.astype(np.uint8))
-        cv2.imshow("target_set", target_set.astype(np.uint8))
-        # cv2.imshow("", heatmap)
-        cv2.waitKey(0)
+        # TODO VISUALIZE
+        # cv2.imshow("support_set", focus)
+        # cv2.imshow("target_set", target_set.astype(np.uint8))
+        # cv2.waitKey(0)
+        # TODO SAVE
+        cv2.imwrite("support.png", focus)
+        cv2.imwrite("target.png", target_set.astype(np.uint8))
+        exit()
+        # TODO END
 
     os_train_true = np.concatenate(os_train_true, axis=None) if len(os_train_true) > 0 else np.zeros(1)
     os_train_pred = np.concatenate(os_train_pred, axis=None) if len(os_train_pred) > 0 else np.zeros(1)

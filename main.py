@@ -34,7 +34,7 @@ class ISBFSAR:
                                                          self.hpe_in, self.hpe_out))
         self.hpe_proc.start()
 
-        self.ar = ActionRecognizer(TRXConfig())
+        self.ar = ActionRecognizer(TRXConfig(), add_hook=False)
 
         # Connect to webcam
         if video_input is None:
@@ -116,8 +116,8 @@ class ISBFSAR:
                 l = max(xm - x1, ym - y1)
                 ar_input = img[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
                 ar_input = cv2.resize(ar_input, (224, 224))
-                cv2.imshow("AR_INPUT", ar_input)  # TODO REMOVE DEBUG
-                cv2.waitKey(1)  # TODO REMOVE DEBUG
+                # cv2.imshow("AR_INPUT", ar_input)  # TODO REMOVE DEBUG
+                # cv2.waitKey(1)  # TODO REMOVE DEBUG
                 ar_input = ar_input / 255.
                 ar_input = ar_input * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
                 ar_input = ar_input.swapaxes(-1, -3).swapaxes(-1, -2)
@@ -249,8 +249,9 @@ class ISBFSAR:
         # support_set = support_set.swapaxes(-1, -2).swapaxes(-2, -3)
         support_set = (support_set * 255).astype(np.uint8)
         support_set = support_set.swapaxes(0, 1).reshape(8, 224*5, 224, 3).swapaxes(0, 1).reshape(5*224, 8*224, 3)
+        support_set = cv2.resize(support_set, (640, 480))
         cv2.imshow("support_set", support_set)
-        cv2.waitKey(1)
+        cv2.waitKey(0)
 
     def learn_command(self, flag):
         # If a string is provided

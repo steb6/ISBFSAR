@@ -7,11 +7,11 @@ from tqdm import tqdm
 
 
 class ActionRecognizer:
-    def __init__(self, args):
+    def __init__(self, args, add_hook=False):
         self.input_type = args.input_type
         self.device = args.device
 
-        self.ar = TRXOS(TRXConfig())
+        self.ar = TRXOS(TRXConfig(), add_hook=add_hook)
         self.ar.load_state_dict(torch.load(args.final_ckpt_path,
                                            map_location=torch.device(0))['model_state_dict'])
         self.ar.cuda()

@@ -237,7 +237,7 @@ class TRXOS(nn.Module):
 
             return x
 
-    def __init__(self, args):
+    def __init__(self, args, add_hook=False):
         super(TRXOS, self).__init__()
         self.args = args
 
@@ -246,7 +246,10 @@ class TRXOS(nn.Module):
             self.features_extractor = MLP(args.n_joints * 3,
                                           args.n_joints * 3 * 2, self.trans_linear_in_dim)
         if args.input_type == "rgb":
-            self.features_extractor = self.myresnet50(pretrained=True)
+            if add_hook:
+                self.features_extractor = self.myresnet50(pretrained=True)
+            else:
+                self.features_extractor = resnet50(pretrained=True)
 
         self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s) for s in args.temp_set])
 
