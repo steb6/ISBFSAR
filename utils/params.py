@@ -62,6 +62,7 @@ class TRXConfig(object):
         # self.data_path = "D:/datasets/nturgbd_trx_skeletons_ALL" if not ubuntu else "../nturgbd_trx_skeletons_ALL"
         # self.n_joints = 25
         # NTU RGB IMAGES
+        # self.data_path = "D:\\NTU_RGB\\NTURGBD_FINAL_IMAGES_no_pad" if not ubuntu else "../NTURGBD_FINAL_IMAGES_no_pad"
         self.data_path = "D:\\NTU_RGB\\NTURGBD_FINAL_IMAGES_no_pad" if not ubuntu else "../NTURGBD_FINAL_IMAGES_no_pad"
 
         # TRAINING

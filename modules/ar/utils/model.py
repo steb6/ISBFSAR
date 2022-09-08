@@ -29,7 +29,7 @@ class PositionalEncoding(nn.Module):
 
 
 class TemporalCrossTransformer(nn.Module):
-    def __init__(self, args, temporal_set_size=3):
+    def __init__(self, args, temporal_set_size=3, add_hook=False):
         super(TemporalCrossTransformer, self).__init__()
 
         self.args = args
@@ -53,6 +53,8 @@ class TemporalCrossTransformer(nn.Module):
         frame_combinations = combinations(frame_idxs, temporal_set_size)
         self.tuples = [torch.tensor(comb).to(args.device) for comb in frame_combinations]
         self.tuples_len = len(self.tuples)
+        self.add_hook = add_hook
+        self.scores = []
 
     def forward(self, support_set, support_labels, queries):
         n_queries = queries.shape[1]
@@ -89,6 +91,7 @@ class TemporalCrossTransformer(nn.Module):
         # all_distances_tensor = torch.zeros(n_queries, self.args.way).cuda()
         all_distances_tensor = []
         diffs = []
+        prototypes = []
         for c in support_labels[0]:
             # select keys and values for just this class
             class_k = torch.index_select(mh_support_set_ks, -3, c)
@@ -104,6 +107,8 @@ class TemporalCrossTransformer(nn.Module):
 
             # TODO BEFORE
             class_scores = self.class_softmax(class_scores)
+            if self.add_hook:
+                self.scores.append(class_scores.detach())
             # TODO NEW
             # max_along_axis = class_scores.max(dim=-2, keepdim=True).values
             # exponential = torch.exp(class_scores[0] - max_along_axis)
@@ -118,6 +123,7 @@ class TemporalCrossTransformer(nn.Module):
 
             # get query specific class prototype
             query_prototype = torch.matmul(class_scores, class_v)
+            prototypes.append(query_prototype)
             # query_prototype = torch.sum(query_prototype, dim=1)
 
             # calculate distances from queries to query-specific class prototypes
@@ -136,7 +142,8 @@ class TemporalCrossTransformer(nn.Module):
 
         all_distances_tensor = torch.cat(all_distances_tensor, dim=1)
 
-        return_dict = {'logits': all_distances_tensor, 'diffs': torch.concat(diffs, dim=1)}
+        return_dict = {'logits': all_distances_tensor, 'diffs': torch.concat(diffs, dim=1),
+                       'prototypes': prototypes}
 
         return return_dict
 
@@ -202,21 +209,17 @@ class TRXOS(nn.Module):
     class myresnet50(ResNet):
         def __init__(self, pretrained=True):
             super().__init__(Bottleneck, [3, 4, 6, 3])
-            self.gradients = None
+            self.gradients = []
             self.activations = []
 
         def activations_hook(self, grad):
-            self.gradients = grad
+            self.gradients.append(grad)
 
         # method for the gradient extraction
         def get_activations_gradient(self):
             return self.gradients
 
-        # method for the activation exctraction
-        def get_activations(self):
-            return self.activations
-
-        def forward(self, x):
+        def forward(self, x, hook=False):
             # See note [TorchScript super()]
             x = self.conv1(x)
             x = self.bn1(x)
@@ -224,12 +227,15 @@ class TRXOS(nn.Module):
             x = self.maxpool(x)
 
             x = self.layer1(x)
+
             x = self.layer2(x)
+
             x = self.layer3(x)
+
             x = self.layer4(x)
 
-            h = x.register_hook(self.activations_hook)
             self.activations.append(x.detach())
+            h = x.register_hook(self.activations_hook)  # BEFORE
 
             x = self.avgpool(x)
             x = torch.flatten(x, 1)
@@ -251,7 +257,7 @@ class TRXOS(nn.Module):
             else:
                 self.features_extractor = resnet50(pretrained=True)
 
-        self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s) for s in args.temp_set])
+        self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s, add_hook=add_hook) for s in args.temp_set])
 
         self.model = args.model
         if self.model == "DISC":
@@ -263,14 +269,13 @@ class TRXOS(nn.Module):
 
     def forward(self, context_images, context_labels, target_images):
         b = context_images.size(0)
-        # with torch.no_grad():
         if self.args.input_type == "rgb":
             b, k, l, c, h, w = context_images.size()
             context_features = self.features_extractor(context_images.reshape(-1, c, h, w)).reshape(b, k, l, -1)
             target_features = self.features_extractor(target_images.reshape(-1, c, h, w)).reshape(b, l, -1)
         else:
-            context_features = self.features_extractor(context_images)
-            target_features = self.features_extractor(target_images)
+            context_features = self.features_extractor(context_images, hook=True)
+            target_features = self.features_extractor(target_images, hook=True)
 
         target_features = target_features.unsqueeze(1)
         out = self.transformers[0](context_features, context_labels, target_features)
@@ -280,7 +285,7 @@ class TRXOS(nn.Module):
         feature = out['diffs'][torch.arange(b), chosen_index, ...]
         decision = self.discriminator(feature)
 
-        return {'logits': all_logits, 'is_true': decision}
+        return {'logits': all_logits, 'is_true': decision, 'prototypes': out['prototypes']}
 
     def distribute_model(self):
         """

@@ -1,25 +1,22 @@
-from tqdm import tqdm
 from modules.ar.utils.dataloader import EpisodicLoader
 from modules.ar.utils.model import TRXOS
 from utils.params import TRXConfig
-from utils.params import ubuntu
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
 import numpy as np
 import torch
+from itertools import combinations
 import cv2
+import random
 
-gpu_id = 1 if ubuntu else 0
-torch.cuda.set_device(gpu_id)
+
+# REPRODUCIBILITY
 torch.manual_seed(0)
-device = TRXConfig().device
+random.seed(1)
+
 
 if __name__ == "__main__":
     args = TRXConfig()
 
-    # Get conversion class id -> class label
+    # LOAD LIST OF TEST CLASSES
     test_classes = ["A1", "A7", "A13", "A19", "A25", "A31", "A37", "A43", "A49",
                     # "A55", # two person
                     "A61", "A67", "A73", "A79", "A85", "A91", "A97", "A103",
@@ -33,197 +30,180 @@ if __name__ == "__main__":
         name = name.strip().replace(" ", "_").replace("/", "-").replace("’", "")
         class_dict[index] = name
     test_classes = [class_dict[elem] for elem in test_classes]
-    test_classes = list(np.sort(test_classes)[:11])  # TODO REMOVEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 
-    # Get model
-    model = TRXOS(args, add_hook=True).to(device)
-    model.load_state_dict(torch.load('modules/ar/modules/raws/rgb/5000.pth')['model_state_dict'])
+    # LOAD MODEL
+    model = TRXOS(args, add_hook=True).to(args.device)
+    # TODO START RENAME
+    params = torch.load('modules/ar/modules/raws/rgb/5000.pth')['model_state_dict']
+    aux = {}
+    for param in params:
+        data = params[param]
+        if 'module' in param:
+            aux[param.replace('.module', '')] = data
+        else:
+            aux[param] = data
+    # TODO END
+    model.load_state_dict(aux)
     model.eval()
 
-    # Create dataset iterator
+    # LOAD DATASET
     train_data = EpisodicLoader(args.data_path, k=args.way, n_task=100, input_type=args.input_type, )
-
-    # Divide dataset into train and validation
     train_data.classes = test_classes
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, num_workers=args.n_workers,
-                                               shuffle=True)
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=1, num_workers=0, shuffle=False)
 
-    # Log
-    print("Train samples: {}".format(len(train_loader)))
-    print("Training for {} epochs".format(args.n_epochs))
-    print("Batch size is {}".format(args.batch_size))
-
-    # Losses
+    # LOSSES
     os_loss_fn = torch.nn.BCELoss()
     fs_loss_fn = torch.nn.CrossEntropyLoss()
+    test_loss_fn = torch.nn.MSELoss()
 
-    fs_train_losses = []
-    fs_train_accuracies = []
-    os_train_losses = []
-    os_train_pred = []
-    os_train_true = []
-
-    for elem in tqdm(train_loader):
-
-        support_set = elem['support_set'].float().to(device)
-
-        support_set.requires_grad = True  # TODO VISUALIZE ACTIVATIONS
-
-        target_set = elem['target_set'].float().to(device)
-        unknown_set = elem['unknown_set'].float().to(device)
-
+    # PREPARE SAMPLE
+    for elem in train_loader:
+        support_set = elem['support_set'].float().to(args.device)
+        # TODO REMOVE DEBUG
+        # support_set[:, 0, ...] = 0
+        # support_set[:, 1, ...] = 0
+        # support_set[:, 2, ...] = 0
+        # support_set[:, 4, ...] = 0
+        # TODO END REMOVE DEBUG
+        target_set = elem['target_set'].float().to(args.device)
+        unknown_set = elem['unknown_set'].float().to(args.device)
+        # support_set.requires_grad = True
+        # target_set.requires_grad = True
         batch_size = support_set.size(0)
-
-        # TODO START MOVE IN DATALOADER
-        # support_set = support_set.reshape(batch_size, args.way, args.seq_len, args.n_joints * 3).cuda().float()
-        # target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-        # unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
         support_set = torch.permute(support_set, (0, 1, 2, 5, 3, 4))
         target_set = torch.permute(target_set, (0, 1, 4, 2, 3))
         unknown_set = torch.permute(unknown_set, (0, 1, 4, 2, 3))
-        # TODO END MOVE IN DATALOADER
-
-        support_labels = torch.arange(args.way).repeat(batch_size).reshape(batch_size, args.way).to(device).int()
+        support_labels = torch.arange(args.way).repeat(batch_size).reshape(batch_size, args.way).to(args.device).int()
         target = np.array(elem['support_classes']).T == \
                  np.repeat(np.array(elem['target_class']), 5).reshape(batch_size, args.way)
-        target = torch.FloatTensor(target).to(device)
+        target = torch.FloatTensor(target).to(args.device)
 
-        ################
-        # Known action #
-        ################
+        # INFERENCE
+        gradients_trg = None
+        gradients_ss = None
+        activations_trg = None
+        activations_ss = None
+        heatmap_ss = None
+        heatmap_trg = None
+        model.features_extractor.gradients = []
+        model.features_extractor.activations = []
+        model.zero_grad()
         out = model(support_set, support_labels, target_set)
-
-        # FS known
         fs_pred = out['logits']
-        known_fs_loss = fs_loss_fn(fs_pred, target)
-        fs_train_losses.append(known_fs_loss.item())
+        if torch.argmax(fs_pred) == torch.argmax(target):
+            print("CORRECT!")
+        else:
+            print("FAIL!")
+        print("Predicted:", fs_pred.detach().cpu().numpy())
+        print("Real:", target.detach().cpu().numpy())
 
-        train_accuracy = torch.eq(torch.argmax(fs_pred, dim=1), torch.argmax(target, dim=1)).float().mean().item()
-        fs_train_accuracies.append(train_accuracy)
+        # COMPUTE GRADIENTS
+        # true_index = (target == 1).nonzero()[0][1]  # TRUE
+        true_index = torch.argmax(fs_pred)  # PREDICTED
+        # model.zero_grad()
+        # (fs_pred[:, true_index]).backward()
+        # known_fs_loss = fs_loss_fn(fs_pred[:, true_index][None], target[:, true_index][None])  # JUST TRUE
+        target.requires_grad = True
+        one_hot = torch.sum(target * fs_pred)
+        # known_fs_loss = fs_loss_fn(fs_pred, target)  # WHOLE
+        # known_fs_loss = test_loss_fn(fs_pred[:, true_index], torch.FloatTensor([0]).cuda())  # WHOLE
+        model.zero_grad()
+        one_hot.backward()
 
-        # # TODO START VISUAL DEBUG
-        # print(elem['support_classes'])
-        # print(elem['target_class'])
-        # print(out['logits'].detach().cpu().numpy())
-        #
+        # GET GRADIENTS, SCORES AND ACTIVATIONS
+        gradients_trg, gradients_ss = model.features_extractor.get_activations_gradient()
+        activations_ss, activations_trg = model.features_extractor.activations
+        # activations_ss = model.features_extractor.get_activations(support_set.reshape(-1, 3, 224, 224))
+        # activations_trg = model.features_extractor.get_activations(target_set.reshape(-1, 3, 224, 224))
+        scores = torch.argmax(model.transformers[0].scores[true_index][0][0])
+        print("Best pair score:", torch.max(model.transformers[0].scores[true_index][0][0]).detach().cpu().item())
+
+        # TRANSFORM DATA INTO IMAGES
         support_set = (support_set.permute(0, 1, 2, 4, 5, 3) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
         support_set = support_set.detach().cpu().numpy()
         support_set = (support_set * 255).astype(int)
         support_set = support_set[0].swapaxes(0, 1).reshape(8, 224*5, 224, 3).swapaxes(0, 1).reshape(5*224, 8*224, 3)
-        #
+
         target_set = (target_set.permute(0, 1, 3, 4, 2) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
         target_set = target_set.detach().cpu().numpy()
         target_set = (target_set * 255).astype(int)
         target_set = target_set[0].swapaxes(0, 1).reshape(224, -1, 3)
+
+        # COMPUTE BEST SCORES
+        frame_idxs = [i for i in range(8)]
+        frame_combinations = combinations(frame_idxs, 2)
+        tuples = [torch.tensor(comb).to(args.device) for comb in frame_combinations]
+        a = tuples[scores % 28]
+        b = tuples[int(np.floor(scores.detach().cpu().item() / 28))]
+        print("Best query pairs:", a.detach().cpu().numpy())
+        print("Best class pairs", b.detach().cpu().numpy())
+
+        # CREATE HEATMAP IMAGES
+        gradients_ss = gradients_ss.mean([2, 3])
+        gradients_trg = gradients_trg.mean([2, 3])
+
+        for i in range(gradients_ss.shape[1]):
+            activations_ss[:, i, :, :] *= gradients_ss[:, i][..., None, None]
+            activations_trg[:, i, :, :] *= gradients_trg[:, i][..., None, None]
+            # for f in range(8):
+            #     print(gradients_trg[f, i])
+            #     act = activations_trg.reshape(8, 2048, 7, 7)[f][i].detach().cpu().numpy()
+            #     act = act / np.max(act)
+            #     cv2.imshow(f"a {i}, img {f}", cv2.resize(act, (224, 224)))
+            #     cv2.waitKey(0)
+
+        size = activations_ss.shape[-1]
+        heatmap_ss = torch.mean(activations_ss, 1)
+        heatmap_ss = np.maximum(heatmap_ss.detach().cpu().numpy(), 0)
+        heatmap_ss /= np.max(heatmap_ss, axis=(1, 2), keepdims=True)
+        heatmap_ss = heatmap_ss.reshape(5, 8, size, size).swapaxes(0, 1).reshape(8, 5*size, size).swapaxes(0, 1).reshape(5*size, size*8)
+        heatmap_ss = cv2.resize(heatmap_ss, (support_set.shape[1], support_set.shape[0]))
+
+        heatmap_trg = torch.mean(activations_trg, 1)
+        heatmap_trg = np.maximum(heatmap_trg.detach().cpu().numpy(), 0)
+        heatmap_trg /= np.max(heatmap_trg, axis=(1, 2), keepdims=True)
+        heatmap_trg = heatmap_trg.reshape(1, 8, size, size).swapaxes(0, 1).reshape(8, 1*size, size).swapaxes(0, 1).reshape(1*size, size*8)
+
+
+        def save_heatmap_img(img, heatmap, name):
+            heatmap = cv2.resize(heatmap, (img.shape[1], img.shape[0]))
+            heatmap = np.uint8(255 * heatmap)
+            heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+            superimposed_img = heatmap * 0.4 + img
+            cv2.imwrite(f'{name}.jpg', superimposed_img)
+
+
+        save_heatmap_img(support_set, heatmap_ss, "ss")
+        save_heatmap_img(target_set, heatmap_trg, "trg")
+
+        # TODO VISUALIZE FILTER
+
+        # cannot easily visualize filters lower down
+        # from keras.applications.vgg16 import VGG16
+        # from matplotlib import pyplot
         #
-        # cv2.imwrite("support.png", support_set)
-        # cv2.imwrite("target.png", target_set)
-        # with open("result.txt", "w") as outfile:
-        #     outfile.write("%s \n %s \n %s \n" % (elem['support_classes'], elem['target_class'], out['logits'].detach().cpu().numpy()))
-        # # TODO END VISUAL DEBUG
-        #
-        # input()
+        # # load the model
+        # model = model.features_extractor
+        # # retrieve weights from the second hidden layer
+        # filters = np.array([model.features_extractor.layer1[0].conv1.weight.data.cpu().numpy().squeeze()])
+        # # normalize filter values to 0-1 so we can visualize them
+        # f_min, f_max = filters.min(), filters.max()
+        # filters = (filters - f_min) / (f_max - f_min)
+        # # plot first few filters
+        # n_filters, ix = 6, 1
+        # for i in range(n_filters):
+        #     # get the filter
+        #     f = filters[:, :, :, i]
+        #     # plot each channel separately
+        #     for j in range(3):
+        #         # specify subplot and turn of axis
+        #         ax = pyplot.subplot(n_filters, 3, ix)
+        #         ax.set_xticks([])
+        #         ax.set_yticks([])
+        #         # plot filter channel in grayscale
+        #         pyplot.imshow(f[:, :, j], cmap='gray')
+        #         ix += 1
+        # # show the figure
+        # pyplot.show()
 
-        # print("Loss is", known_fs_loss.item(), "out is", fs_pred.detach().cpu().numpy(), "target:", target.detach().cpu().numpy())
-
-        # if epoch > args.start_discriminator_after_epoch:
-        #     # OS known (target depends on true class)
-        #     os_pred = out['is_true']
-        #     target = torch.eq(torch.argmax(fs_pred, dim=1), torch.argmax(target, dim=1)).float().unsqueeze(-1)
-        #     # Train only on correct prediction
-        #     # true_s = (target == 1.).nonzero(as_tuple=True)[0]
-        #     # n = len(true_s)
-        #     # os_pred = os_pred[true_s]
-        #     # target = target[true_s]
-        #     if target.item() == 1:  # TODO do something like this to train discriminator with batch size = 1
-        #         known_os_loss = os_loss_fn(os_pred, target)
-        #         os_train_true.append(target.cpu().numpy())
-        #         os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
-        #         os_train_losses.append(known_os_loss.item())
-        #
-        #         # TODO EXPERIMENT TO TRAIN RGB
-        #         known_os_loss.backward()
-        #         if i % args.optimize_every == 0:
-        #             optimizer.step()
-        #             optimizer.zero_grad()
-        #         # TODO END EXPERIMENT TO TRAIN RGB
-        #
-        #         ##################
-        #         # Unknown action #
-        #         ##################
-        #         out = model(support_set, support_labels, unknown_set)
-        #
-        #         # OS unknown
-        #         os_pred = out['is_true']
-        #         target = torch.zeros_like(os_pred)
-        #         # Get n samples
-        #         # os_pred = os_pred[:n]
-        #         # target = target[:n]
-        #
-        #         unknown_os_loss = os_loss_fn(os_pred, target)
-        #         os_train_losses.append(unknown_os_loss.item())
-        #         os_train_true.append(target.cpu().numpy())
-        #         os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
-        #
-        #         # TODO EXPERIMENT TO TRAIN RGB
-        #         unknown_os_loss.backward()
-        #         if i % args.optimize_every == 0:
-        #             optimizer.step()
-        #             optimizer.zero_grad()
-        #         # TODO END EXPERIMENT TO TRAIN RGB
-        #
-        #     final_loss = final_loss + known_os_loss + unknown_os_loss
-        ############
-        # Optimize #
-        ############
-
-        # WANDB
-
-        known_fs_loss.backward()  # To free memory
-        gradients = model.features_extractor.get_activations_gradient()
-        activations = model.features_extractor.get_activations()[0]
-        activations_target = model.features_extractor.get_activations()[1]
-
-        gradients = gradients.mean([2, 3])
-        for i in range(2048):
-            activations[:, i, :, :] *= gradients[:, i][..., None, None]
-            # activations_target[:, i, :, :] *= gradients[:, i][..., None, None]
-
-        heatmap = torch.mean(activations, 1)
-        # heatmap = -heatmap  # TODO TRY
-        heatmap = np.maximum(heatmap.detach().cpu().numpy(), 0)
-
-        heatmap /= np.max(heatmap, axis=(1, 2), keepdims=True)
-
-        # draw the heatmap
-        import matplotlib.pyplot as plt
-        heatmap = heatmap.reshape(5, 8, 7, 7).swapaxes(0, 1).reshape(8, 5*7, 7).swapaxes(0, 1).reshape(5*7, 7*8)
-        heatmap = cv2.resize(heatmap, (support_set.shape[1], support_set.shape[0]))
-
-        # TODO FIX
-        colormap = plt.get_cmap('inferno')
-        heatmap = (colormap(heatmap) * 2 ** 16).astype(np.uint16)[:, :, :3]
-        heatmap = cv2.cvtColor(heatmap, cv2.COLOR_RGB2BGR)
-        focus = cv2.addWeighted(((support_set / 255)  * 2 ** 16).astype(np.uint16), 0.5, heatmap, 0.5, 0)
-
-        # TODO VISUALIZE
-        # cv2.imshow("support_set", focus)
-        # cv2.imshow("target_set", target_set.astype(np.uint8))
-        # cv2.waitKey(0)
-        # TODO SAVE
-        cv2.imwrite("support.png", focus)
-        cv2.imwrite("target.png", target_set.astype(np.uint8))
-        exit()
-        # TODO END
-
-    os_train_true = np.concatenate(os_train_true, axis=None) if len(os_train_true) > 0 else np.zeros(1)
-    os_train_pred = np.concatenate(os_train_pred, axis=None) if len(os_train_pred) > 0 else np.zeros(1)
-    print({"train/fs_loss": sum(fs_train_losses) / len(fs_train_losses),
-           "train/fs_accuracy": sum(fs_train_accuracies) / len(fs_train_accuracies),
-           "train/os_loss": (sum(os_train_losses) / len(os_train_losses)) if len(os_train_losses) > 0 else 0,
-           "train/os_accuracy": accuracy_score(os_train_true, os_train_pred),
-           "train/os_precision": precision_score(os_train_true, os_train_pred, zero_division=0),
-           "train/os_recall": recall_score(os_train_true, os_train_pred, zero_division=0),
-           "train/os_f1": f1_score(os_train_true, os_train_pred, zero_division=0),
-           "train/os_n_1_true": os_train_true.mean(),
-           "train/os_n_1_pred": os_train_pred.mean()})
+        input()
