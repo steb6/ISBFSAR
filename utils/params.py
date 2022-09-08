@@ -1,6 +1,6 @@
 import platform
 
-input_type = "rgb"  # rgb or skeleton
+input_type = "skeleton"  # rgb or skeleton
 seq_len = 8 if input_type == "rgb" else 16  # 8 for rgb and 16 for skeleton
 
 

@@ -231,7 +231,7 @@ if __name__ == "__main__":
         p, e, _ = h.estimate(img)
 
         if p is not None:
-            p = p * 2200
+            # p = p * 2200
             dist = np.linalg.norm(p[0])
             print(dist)
             # p = p - p[0]
