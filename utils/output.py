@@ -119,9 +119,6 @@ class VISPYVisualizer:
         b4.add(self.log)
 
     def on_timer(self, _):
-        # if not self.is_running:
-        #     self.canvas.close()
-        #     exit()
         if not self.show:
             return
         # Check if there is something to show
@@ -133,15 +130,18 @@ class VISPYVisualizer:
         if "log" in elements.keys():
             self.log.text = elements["log"]
         else:
+            fps = elements["fps"]
+            img = elements["img"]
+
+            bbox = elements["bbox"] if "bbox" in elements.keys() else None
             edges = elements["edges"] if "edges" in elements.keys() else None
             pose = elements["pose"] if "pose" in elements.keys() else None
-            img = elements["img"]
+            distance = elements["distance"] if "distance" in elements.keys() else None
+
             focus = elements["focus"] if "focus" in elements.keys() else None
-            fps = elements["fps"]
+
             results = elements["actions"] if "actions" in elements.keys() else None
             is_true = elements["is_true"] if "is_true" in elements.keys() else None
-            distance = elements["distance"] if "distance" in elements.keys() else None
-            bbox = elements["bbox"] if "bbox" in elements.keys() else None
 
             # POSE
             if pose is not None:  # IF pose is not None, edges is not None
@@ -210,7 +210,8 @@ class VISPYVisualizer:
                     self.b2.add(self.values[r])
 
                 bar_height = 0.075
-                self.values[r].label = "{:.2f}".format(score)
+                self.values[r].label = "{}%".format(int(score*100))
+                score = score*0.9  # To avoid to reach the right limit
                 self.values[r].pos = 0.5 + (score/4 if score/2 > bar_height else bar_height/2), \
                                      0.7 - (0.1 * i) - bar_height/2
                 self.values[r].size = (score/2 if score/2 > bar_height else bar_height, bar_height)

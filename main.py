@@ -117,8 +117,6 @@ class ISBFSAR:
                 l = max(xm - x1, ym - y1)
                 img_ = img[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
                 img_ = cv2.resize(img_, (224, 224))
-                # cv2.imshow("AR_INPUT", img_)  # TODO REMOVE DEBUG
-                # cv2.waitKey(1)  # TODO REMOVE DEBUG
                 img_ = img_ / 255.
                 img_ = img_ * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
                 img_ = img_.swapaxes(-1, -3).swapaxes(-1, -2)
@@ -237,9 +235,6 @@ class ISBFSAR:
         cv2.waitKey(0)
 
     def learn_command(self, flag):
-        # If a string is provided
-        # requires_focus = "-focus" in flag
-        # if '.' not in flag[0]:
         flag = flag[0]
 
         self.log("WAIT...")
