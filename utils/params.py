@@ -1,6 +1,6 @@
 import platform
 
-input_type = "skeleton"  # rgb or skeleton
+input_type = "rgb"  # rgb, skeleton or hybrid
 seq_len = 8 if input_type == "rgb" else 16  # 8 for rgb and 16 for skeleton
 
 
@@ -17,6 +17,7 @@ class MainConfig(object):
         self.cam_height = 480
         self.window_size = seq_len
         self.skeleton_scale = 2200.
+        self.acquisition_time = 3  # Seconds
 
 
 class MetrabsTRTConfig(object):
@@ -54,16 +55,8 @@ class TRXConfig(object):
         self.device = 'cuda'
 
         # CHOICE DATASET
-        # NTU METRABS SKELETONS
-        # self.exemplars_path = "D:\\datasets\\metrabs_trx_skeletons_exemplars" if not ubuntu else "../metrabs_trx_skeletons_exemplars"
-        # self.data_path = "D:/datasets/nturgbd_metrabs_2/" if not ubuntu else "../nturgbd_metrabs_2/"
-        # self.n_joints = 30
-        # NTU ORIGINAL SKELETONS
-        # self.data_path = "D:/datasets/nturgbd_trx_skeletons_ALL" if not ubuntu else "../nturgbd_trx_skeletons_ALL"
-        # self.n_joints = 25
-        # NTU RGB IMAGES
-        # self.data_path = "D:\\NTU_RGB\\NTURGBD_FINAL_IMAGES_no_pad" if not ubuntu else "../NTURGBD_FINAL_IMAGES_no_pad"
-        self.data_path = "D:\\NTU_RGB\\NTURGBD_FINAL_IMAGES_no_pad" if not ubuntu else "../NTURGBD_FINAL_IMAGES_no_pad"
+        self.data_path = "D:\\datasets\\test"
+        self.n_joints = 30
 
         # TRAINING
         self.initial_lr = 1e-2 if self.input_type == "skeleton" else 1e-3

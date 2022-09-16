@@ -34,7 +34,7 @@ if __name__ == "__main__":
     # LOAD MODEL
     model = TRXOS(args, add_hook=True).to(args.device)
     # TODO START RENAME
-    params = torch.load('modules/ar/modules/raws/rgb/5000.pth')['model_state_dict']
+    params = torch.load('modules/ar/modules/raws/rgb/6556.pth')['model_state_dict']
     aux = {}
     for param in params:
         data = params[param]
@@ -113,10 +113,6 @@ if __name__ == "__main__":
         # GET GRADIENTS, SCORES AND ACTIVATIONS
         gradients_trg, gradients_ss = model.features_extractor.get_activations_gradient()
         activations_ss, activations_trg = model.features_extractor.activations
-        # activations_ss = model.features_extractor.get_activations(support_set.reshape(-1, 3, 224, 224))
-        # activations_trg = model.features_extractor.get_activations(target_set.reshape(-1, 3, 224, 224))
-        scores = torch.argmax(model.transformers[0].scores[true_index][0][0])
-        print("Best pair score:", torch.max(model.transformers[0].scores[true_index][0][0]).detach().cpu().item())
 
         # TRANSFORM DATA INTO IMAGES
         support_set = (support_set.permute(0, 1, 2, 4, 5, 3) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
@@ -133,41 +129,81 @@ if __name__ == "__main__":
         frame_idxs = [i for i in range(8)]
         frame_combinations = combinations(frame_idxs, 2)
         tuples = [torch.tensor(comb).to(args.device) for comb in frame_combinations]
-        a = tuples[scores % 28]
-        b = tuples[int(np.floor(scores.detach().cpu().item() / 28))]
+
+        scores = model.transformers[0].scores[true_index][0][0].detach().cpu().numpy()
+
+        best_ss = tuples[np.argmax(np.sum(scores, axis=1))]
+        a = tuples[np.argmax(scores) % 28]
+        b = tuples[int(np.floor(np.argmax(scores) / 28))]
+
+        cv2.imwrite("scores.jpg", (scores / np.max(scores))*255)
+        print("Best pair score:", np.max(scores))
         print("Best query pairs:", a.detach().cpu().numpy())
         print("Best class pairs", b.detach().cpu().numpy())
+        print("Best ss:", best_ss)
 
         # CREATE HEATMAP IMAGES
         gradients_ss = gradients_ss.mean([2, 3])
         gradients_trg = gradients_trg.mean([2, 3])
 
+        # TODO JUST BEST GRADIENTS
+        # best_gradients_ss = (-gradients_ss).argmax(dim=1)
+        # best_gradients_trg = (-gradients_trg).argmax(dim=1)
+        # best_activations = 3
+        #
+        # best_ss = []
+        # best_trg = []
+        # for i in range(40):
+        #     best_ss.append(activations_ss[i, best_gradients_ss[i], ...])
+        # for i in range(8):
+        #     best_trg.append(activations_trg[i, best_gradients_trg[i], ...])
+        # heatmap_ss = torch.stack(best_ss).cpu().numpy()
+        # heatmap_trg = torch.stack(best_trg).cpu().numpy()
+
+        # TODO WEIGHTED SUM
         for i in range(gradients_ss.shape[1]):
             activations_ss[:, i, :, :] *= gradients_ss[:, i][..., None, None]
-            activations_trg[:, i, :, :] *= gradients_trg[:, i][..., None, None]
+            activations_trg[:, i, :, :] *= -gradients_trg[:, i][..., None, None]
+
+            # activations_ss[:, i, :, :] *= activations_ss[:, i, :, :].mean(dim=(1, 2))[..., None, None]
+            # activations_trg[:, i, :, :] *= activations_trg[:, i, :, :].mean(dim=(1, 2))[..., None, None]
+
             # for f in range(8):
             #     print(gradients_trg[f, i])
             #     act = activations_trg.reshape(8, 2048, 7, 7)[f][i].detach().cpu().numpy()
-            #     act = act / np.max(act)
-            #     cv2.imshow(f"a {i}, img {f}", cv2.resize(act, (224, 224)))
+            #     act = np.maximum(act, 0)
+            #     act = (act / np.max(act)) * 255
+            #     cv2.imshow(f"a {i}, img {f}", cv2.resize(act.astype(np.uint8), (224, 224)))
             #     cv2.waitKey(0)
+            #     cv2.imwrite(f"a{i}-img{f}.png", cv2.resize(act.astype(np.uint8), (224, 224)))
+        heatmap_ss = torch.mean(activations_ss, 1).detach().cpu().numpy()
+        heatmap_trg = torch.mean(activations_trg, 1).detach().cpu().numpy()
+
+        # TODO END
 
         size = activations_ss.shape[-1]
-        heatmap_ss = torch.mean(activations_ss, 1)
-        heatmap_ss = np.maximum(heatmap_ss.detach().cpu().numpy(), 0)
+        # heatmap_ss[..., :2, :2] = 0  # TODO REMOVE DEBUG
+        heatmap_ss = np.maximum(heatmap_ss, 0)
         heatmap_ss /= np.max(heatmap_ss, axis=(1, 2), keepdims=True)
         heatmap_ss = heatmap_ss.reshape(5, 8, size, size).swapaxes(0, 1).reshape(8, 5*size, size).swapaxes(0, 1).reshape(5*size, size*8)
-        heatmap_ss = cv2.resize(heatmap_ss, (support_set.shape[1], support_set.shape[0]))
 
-        heatmap_trg = torch.mean(activations_trg, 1)
-        heatmap_trg = np.maximum(heatmap_trg.detach().cpu().numpy(), 0)
+        # heatmap_trg[..., :2, :2] = 0  # TODO REMOVE DEBUG
+        heatmap_trg = np.maximum(heatmap_trg, 0)
         heatmap_trg /= np.max(heatmap_trg, axis=(1, 2), keepdims=True)
         heatmap_trg = heatmap_trg.reshape(1, 8, size, size).swapaxes(0, 1).reshape(8, 1*size, size).swapaxes(0, 1).reshape(1*size, size*8)
 
-
+        heats = []
         def save_heatmap_img(img, heatmap, name):
-            heatmap = cv2.resize(heatmap, (img.shape[1], img.shape[0]))
-            heatmap = np.uint8(255 * heatmap)
+            if name == "ss":
+                heatmap = heatmap[int(heatmap.shape[0] / 5) * true_index.item():int(heatmap.shape[0] / 5) * (
+                            true_index + 1).item(), ...]
+                img = img[int(img.shape[0] / 5) * true_index.item():int(img.shape[0] / 5) * (
+                            true_index + 1).item(), ...]
+            heats.append(heatmap)
+            heatmap *= 255
+            heatmap = cv2.resize(heatmap, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
+            cv2.imwrite(f"{name}_heatmap.jpg", heatmap)
+            heatmap = np.uint8(heatmap)
             heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
             superimposed_img = heatmap * 0.4 + img
             cv2.imwrite(f'{name}.jpg', superimposed_img)

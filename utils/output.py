@@ -1,4 +1,4 @@
-import vispy.scene.visuals
+import cv2
 from vispy import app, scene, visuals
 from vispy.color import Colormap
 from vispy.scene.visuals import Text, Image, ColorBar
@@ -133,18 +133,18 @@ class VISPYVisualizer:
         if "log" in elements.keys():
             self.log.text = elements["log"]
         else:
-            edges = elements["edges"]
-            pose = elements["pose"]
+            edges = elements["edges"] if "edges" in elements.keys() else None
+            pose = elements["pose"] if "pose" in elements.keys() else None
             img = elements["img"]
-            focus = elements["focus"]
+            focus = elements["focus"] if "focus" in elements.keys() else None
             fps = elements["fps"]
-            results = elements["actions"]
-            is_true = elements["is_true"]
-            distance = elements["distance"]
-            box = elements["box"]
+            results = elements["actions"] if "actions" in elements.keys() else None
+            is_true = elements["is_true"] if "is_true" in elements.keys() else None
+            distance = elements["distance"] if "distance" in elements.keys() else None
+            bbox = elements["bbox"] if "bbox" in elements.keys() else None
 
             # POSE
-            if pose is not None:
+            if pose is not None:  # IF pose is not None, edges is not None
                 theta = 90
                 R = np.matrix([[1, 0, 0],
                                [0, math.cos(theta), -math.sin(theta)],
@@ -154,6 +154,11 @@ class VISPYVisualizer:
                     self.lines[i].set_data((pose[[edge[0], edge[1]]]))
 
             # IMAGE
+            img = cv2.flip(img, 0)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            if bbox is not None:
+                x1, x2, y1, y2 = bbox
+                img = cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 1)
             self.image.set_data(img)
 
             # INFO

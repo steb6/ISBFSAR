@@ -3,45 +3,38 @@ import pickle
 import torch.utils.data as data
 import random
 import numpy as np
-from torchvision.transforms import transforms
 import cv2
-import torch
 
 
 # https://rose1.ntu.edu.sg/dataset/actionRecognition/
 
 
 class EpisodicLoader(data.Dataset):
-    def __init__(self, path, k=5, n_task=10000, input_type="skeleton"):
-        self.n_task = n_task
+    def __init__(self, path, k=5, n_task=10000, l=16, input_type="hybrid"):
         self.path = path
         self.k = k
-        self.classes = next(os.walk(self.path))[1]  # Get list of directories
+        self.n_task = n_task
+        self.l = l
         self.input_type = input_type
-        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        self.classes = next(os.walk(self.path))[1]  # Get list of directories
 
     def get_random_sample(self, class_name):
-        sequences = next(os.walk(os.path.join(self.path, class_name)))[2 if self.input_type == "skeleton" else 1]
-        # path = None
-        # SOME FOLDERS APPEARS TO BE EMPTY, IN THE CASE DO RESAMPLING
-        # while path is None or len(os.listdir(path)) == 0:
-        path = random.sample(sequences, 1)[0]  # Get random file
+        sequences = next(os.walk(os.path.join(self.path, class_name)))[1]  # Just list of directories
+        path = random.sample(sequences, 1)[0]  # Get first random file
         path = os.path.join(self.path, class_name, path)  # Create full path
-        sample = None
 
-        if self.input_type == "skeleton":
-            with open(path, 'rb') as file:
-                sample = pickle.load(file)
-        if self.input_type == "rgb":
-            imgs = []
-            for img_number in range(8):
-                img = cv2.imread(os.path.join(path, f"{img_number}.png"))
-                img = img / 255.  # TODO READD
-                img = img * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])  # TODO READD
-                imgs.append(img)
-            sample = np.array(imgs)
-            # sample = sample[list(range(0, 16, 2))]  # TODO IT RETURNS 8 IMAGES INSTEAD OF 16
-        return sample
+        imgs = []
+        poses = []
+        for i in range(self.l):
+            with open(os.path.join(path, f"{i}.pkl"), 'rb') as file:
+                poses.append(pickle.load(file))
+            img = cv2.imread(os.path.join(path, f"{i}.png"))
+            img = cv2.resize(img, (224, 224))
+            img = img / 255.
+            img = img * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
+            imgs.append(img)
+
+        return np.stack(imgs), np.stack(poses)
 
     def __getitem__(self, _):  # Must return complete, imp_x and impl_y
         support_classes = random.sample(self.classes, self.k)
@@ -52,29 +45,9 @@ class EpisodicLoader(data.Dataset):
         target_set = self.get_random_sample(target_class)
         unknown_set = self.get_random_sample(unknown_class)
 
-        support_set = np.array(support_set)
-        target_set = np.array(target_set)
-        unknown_set = np.array(unknown_set)
-
-        # # TODO REMOVE DEBUG
-        # print(support_classes)
-        # for a in support_set:
-        #     for b in a:
-        #         cv2.imshow("", b)
-        #         cv2.waitKey(0)
-        # print(target_class)
-        # for a in target_set:
-        #     cv2.imshow("", a)
-        #     cv2.waitKey(0)
-        # print(unknown_class)
-        # for a in unknown_set:
-        #     cv2.imshow("", a)
-        #     cv2.waitKey(0)
-        # # TODO END REMOVE DEBUG
-
-        return {'support_set': np.array(support_set),
-                'target_set': np.array(target_set),
-                'unknown_set': np.array(unknown_set),
+        return {'support_set': support_set,
+                'target_set': target_set,
+                'unknown_set': unknown_set,
                 'support_classes': support_classes,
                 'target_class': target_class,
                 'unknown_class': unknown_class}
@@ -139,3 +112,32 @@ class TestMetrabsData(data.Dataset):
 
     def __len__(self):
         return len(self.target_set)
+
+
+if __name__ == "__main__":
+    from utils.matplotlib_visualizer import MPLPosePrinter
+    from utils.params import TRXConfig
+
+    skeleton = 'smpl+head_30'
+    with open('assets/skeleton_types.pkl', "rb") as input_file:
+        skeleton_types = pickle.load(input_file)
+    edges = skeleton_types[skeleton]['edges']
+
+    loader = EpisodicLoader(TRXConfig().data_path, input_type="hybrid")
+    vis = MPLPosePrinter()
+
+    for elem in loader:
+        sup = elem['support_set']
+        trg = elem['target_set']
+        unk = elem['unknown_set']
+
+        print(elem['support_classes'])
+        for c in range(5):
+            for i in range(16):
+                cv2.imshow("sup", sup[c][0][i])
+                cv2.waitKey(1)
+
+                vis.clear()
+                vis.print_pose(sup[c][1][i], edges)
+                vis.sleep(0.01)
+

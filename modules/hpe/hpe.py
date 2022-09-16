@@ -12,9 +12,12 @@ from utils.matplotlib_visualizer import MPLPosePrinter
 
 
 class HumanPoseEstimator:
-    def __init__(self, model_config, cam_config):
+    def __init__(self, model_config, cam_config, just_box=None):
 
-        self.just_box = model_config.just_box
+        if just_box is None:
+            self.just_box = model_config.just_box
+        else:
+            self.just_box = just_box
 
         self.yolo_thresh = model_config.yolo_thresh
         self.nms_thresh = model_config.nms_thresh
@@ -90,7 +93,7 @@ class HumanPoseEstimator:
 
         # If we are doing rgb inference, we need just the box
         if self.just_box:
-            return x1, y1, x2, y2
+            return {"bbox": (x1, y1, x2, y2)}
 
         new_K, homo_inv = homography(x1, x2, y1, y2, self.K, 256)
 
@@ -208,7 +211,9 @@ class HumanPoseEstimator:
 
         pred3d = pred3d[0]  # Remove batch dimension
 
-        return pred3d, edges, (x1, x2, y1, y2)
+        return {"pose": pred3d,
+                "edges": edges,
+                "bbox": (x1, x2, y1, y2)}
 
 
 if __name__ == "__main__":

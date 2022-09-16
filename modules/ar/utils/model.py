@@ -234,10 +234,13 @@ class TRXOS(nn.Module):
 
             x = self.layer4(x)
 
-            self.activations.append(x.detach())
-            h = x.register_hook(self.activations_hook)  # BEFORE
+            # For GRAD-CAM
+            if self.hook:
+                self.activations.append(x.detach())
+                h = x.register_hook(self.activations_hook)
 
             x = self.avgpool(x)
+
             x = torch.flatten(x, 1)
             x = self.fc(x)
 
@@ -268,14 +271,15 @@ class TRXOS(nn.Module):
             self.discriminator = torch.exp
 
     def forward(self, context_images, context_labels, target_images):
+        context_images, target_images = context_images[0], target_images[0]  # ADD HYBRID PART
         b = context_images.size(0)
         if self.args.input_type == "rgb":
             b, k, l, c, h, w = context_images.size()
             context_features = self.features_extractor(context_images.reshape(-1, c, h, w)).reshape(b, k, l, -1)
             target_features = self.features_extractor(target_images.reshape(-1, c, h, w)).reshape(b, l, -1)
         else:
-            context_features = self.features_extractor(context_images, hook=True)
-            target_features = self.features_extractor(target_images, hook=True)
+            context_features = self.features_extractor(context_images)
+            target_features = self.features_extractor(target_images)
 
         target_features = target_features.unsqueeze(1)
         out = self.transformers[0](context_features, context_labels, target_features)

@@ -60,6 +60,7 @@ class ISBFSAR:
         self.fps_s = []
         self.last_poses = []
         self.skeleton_scale = args.skeleton_scale
+        self.acquisition_time = args.acquisition_time
 
         # Create input
         self.input_queue = Queue(1)
@@ -73,70 +74,68 @@ class ISBFSAR:
             self.output_proc.start()
 
     def get_frame(self, img=None):
+        """
+        get frame, do inference, return all possible info
+        """
         start = time.time()
+        elements = {}
+        ar_input = []
 
         # If img is not given (not a video), try to get img
         if img is None:
             ret, img = self.cap.read()
             if not ret:
                 raise Exception("Cannot grab frame!")
+            elements["img"] = img
 
         # Start independent modules
-        focus = False
-
         self.focus_in.put(img)
-
-        # AR ############################################################
         self.hpe_in.put(img)
 
-        if self.input_type == "skeleton":
-            h = self.hpe_out.get()
-            if h is not None:
-                pose3d_abs, edges, bbox = h
-            else:
-                pose3d_abs, edges, bbox = None, None, None
+        # SKELETON CASE
+        hpe_res = self.hpe_out.get()
+        if self.input_type == "hybrid" or self.input_type == "skeleton":
+            if hpe_res is not None:
+                pose, edges, bbox = hpe_res['pose'], hpe_res['edges'], hpe_res['bbox']
+                if pose is not None:
+                    pose = pose - pose[0, :]
+                    elements["pose"] = pose
+                    ar_input.append(pose)
+                elements["edges"] = edges
+                if bbox is not None:
+                    elements["bbox"] = bbox
+                if pose is not None:
+                    elements["distance"] = np.sqrt(np.sum(np.square(np.array([0, 0, 0]) - np.array(pose[0])))) * 2
 
-            # Compute distance
-            d = None
-            if pose3d_abs is not None:
-                cam_pos = np.array([0, 0, 0])
-                man_pose = np.array(pose3d_abs[0])
-                d = np.sqrt(np.sum(np.square(cam_pos - man_pose)))
-
-            # Normalize
-            pose3d_root = pose3d_abs - pose3d_abs[0, :] if pose3d_abs is not None else None
-            ar_input = pose3d_root
-
-        else:  # RGB case
-            h = self.hpe_out.get()
-            if h is not None:
-                x1, y1, x2, y2 = h
+        # RGB CASE
+        if self.input_type == "hybrid" or self.input_type == "rgb":
+            if hpe_res is not None:
+                x1, y1, x2, y2 = hpe_res['bbox']
+                elements["bbox"] = x1, x2, y1, y2
                 xm = int((x1 + x2) / 2)
                 ym = int((y1 + y2) / 2)
                 l = max(xm - x1, ym - y1)
-                ar_input = img[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
-                ar_input = cv2.resize(ar_input, (224, 224))
-                # cv2.imshow("AR_INPUT", ar_input)  # TODO REMOVE DEBUG
+                img_ = img[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
+                img_ = cv2.resize(img_, (224, 224))
+                # cv2.imshow("AR_INPUT", img_)  # TODO REMOVE DEBUG
                 # cv2.waitKey(1)  # TODO REMOVE DEBUG
-                ar_input = ar_input / 255.
-                ar_input = ar_input * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
-                ar_input = ar_input.swapaxes(-1, -3).swapaxes(-1, -2)
-                bbox = x1, x2, y1, y2
-            else:
-                ar_input = None
-                bbox = None
-            pose3d_root = None
-            edges = None
-            d = None
+                img_ = img_ / 255.
+                img_ = img_ * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
+                img_ = img_.swapaxes(-1, -3).swapaxes(-1, -2)
+                ar_input.append(img_)
+                elements["img_preprocessed"] = img_
 
         # Make inference
         results = self.ar.inference(ar_input)
         actions, is_true = results
+        elements["actions"] = actions
+        elements["is_true"] = is_true
 
         # FOCUS #######################################################
         focus_ret = self.focus_out.get()
         if focus_ret is not None:
             focus, face = focus_ret
+            elements["focus"] = focus
             # img = self.focus.print_bbox(img, face)  # TODO PRINT FACE AGAIN
 
         end = time.time()
@@ -145,29 +144,12 @@ class ISBFSAR:
         self.fps_s.append(1. / (end - start))
         fps_s = self.fps_s[-10:]
         fps = sum(fps_s) / len(fps_s)
+        elements["fps"] = fps
 
         if self.visualizer:
-            if bbox is not None:
-                # Print bbox
-                x1, x2, y1, y2 = bbox
-                img = cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 1)
-
-            # Send to visualizer
-            img = cv2.flip(img, 0)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            elements = {"img": img,
-                        "pose": pose3d_root,
-                        "edges": edges,
-                        "fps": fps,
-                        "focus": focus,
-                        "actions": actions,
-                        "is_true": is_true,
-                        "distance": d * 2 if d is not None else None,
-                        "box": None
-                        }
             self.output_queue.put((elements,))
 
-        return ar_input, pose3d_root, results
+        return elements
 
     def log(self, msg):
         self.output_queue.put(({"log": msg},))
@@ -180,7 +162,7 @@ class ISBFSAR:
                 msg = self.input_queue.get()
             else:
                 # We didn't receive a command, just do inference
-                _, _, _ = self.get_frame()
+                _ = self.get_frame()
                 continue
 
             msg = msg.strip()
@@ -190,13 +172,13 @@ class ISBFSAR:
             if msg[0] == 'close' or msg[0] == 'exit' or msg[0] == 'quit' or msg[0] == 'q':
                 break
 
-            elif msg[0] == "add":
+            elif msg[0] == "add" and len(msg) > 1:
                 self.learn_command(msg[1:])
 
-            elif msg[0] == "remove":
+            elif msg[0] == "remove" and len(msg) > 1:
                 self.forget_command(msg[1])
 
-            elif msg[0] == "test":
+            elif msg[0] == "test" and len(msg) > 1:
                 self.test_video(msg[1])
 
             elif msg[0] == "save":
@@ -227,7 +209,7 @@ class ISBFSAR:
             if key > -1:
                 break
             self.log("{:.2f}%".format((i / (video_length - 1)) * 100))
-            _, _, _ = self.get_frame(img)
+            _ = self.get_frame(img)
 
             n_skip = int((time.time() - start) * fps)
             for _ in range(n_skip):
@@ -243,106 +225,102 @@ class ISBFSAR:
         self.ar.remove(flag)
 
     def debug(self):
-        support_set = self.ar.support_set
-        support_set = support_set.detach().cpu().numpy().swapaxes(-2, -3).swapaxes(-1, -2)
-        support_set = (support_set - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
-        # support_set = support_set.swapaxes(-1, -2).swapaxes(-2, -3)
-        support_set = (support_set * 255).astype(np.uint8)
-        support_set = support_set.swapaxes(0, 1).reshape(8, 224*5, 224, 3).swapaxes(0, 1).reshape(5*224, 8*224, 3)
-        support_set = cv2.resize(support_set, (640, 480))
-        cv2.imshow("support_set", support_set)
+        ss = self.ar.support_set
+        ss = np.stack([ss[c]["imgs"].detach().cpu().numpy() for c in ss.keys()])
+        ss = ss.swapaxes(-2, -3).swapaxes(-1, -2)
+        ss = (ss - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
+        ss = (ss * 255).astype(np.uint8)
+        n = len(ss)
+        cv2.imshow("support_set",
+                   cv2.resize(ss.swapaxes(0, 1).reshape(8, 224 * n, 224, 3).swapaxes(0, 1).reshape(n * 224, 8 * 224, 3),
+                              (640, 96 * len(ss))))
         cv2.waitKey(0)
 
     def learn_command(self, flag):
         # If a string is provided
-        requires_focus = "-focus" in flag
-        if '.' not in flag[0]:
-            flag = flag[0]
+        # requires_focus = "-focus" in flag
+        # if '.' not in flag[0]:
+        flag = flag[0]
 
-            self.log("WAIT...")
-            now = time.time()
-            while (time.time() - now) < 3:
-                _, _, _ = self.get_frame()
+        self.log("WAIT...")
+        now = time.time()
+        while (time.time() - now) < 3:
+            _ = self.get_frame()
 
-            self.log("GO!")
-            playsound('assets' + os.sep + 'start.wav')
-            poses = []
-            imgs = []
-            i = 0
-            off_time = 3000 / self.window_size
-            while True:
-                start = time.time()
-                if len(poses if self.input_type == "skeleton" else imgs) == self.window_size:
-                    break
-                img, pose, _ = self.get_frame()
-                imgs.append(img)
-                if pose is not None:
-                    poses.append(pose)
-                self.log("{:.2f}%".format((i / (self.window_size - 1)) * 100))
-                i += 1
-                while (time.time() - start)*1000 < off_time:
-                    continue
+        self.log("GO!")
+        playsound('assets' + os.sep + 'start.wav')
+        data = []
+        i = 0
+        off_time = self.acquisition_time / self.window_size
+        while len(data) < self.window_size:
+            start = time.time()
+            res = self.get_frame()
+            if self.input_type in ["skeleton", "hybrid"]:
+                if "pose" in res.keys() and res["pose"] is not None:
+                    data.append((res["img_preprocessed"], res["pose"]))
+            else:
+                data.append((res["img_preprocessed"],))
+            self.log("{:.2f}%".format((i / (self.window_size - 1)) * 100))
+            i += 1
+            while (time.time() - start)*1000 < off_time:
+                continue
 
-            data = np.stack(poses if self.input_type == "skeleton" else imgs)
-            playsound('assets' + os.sep + 'stop.wav')
-            self.log("100%")
+        playsound('assets' + os.sep + 'stop.wav')
+        self.log("100%")
         # If a path to a video is provided
-        else:
-            if not os.path.exists(flag[0]):
-                self.log("Video file does not exist!")
-                return
-            # self.cap.release()
-            video = cv2.VideoCapture(flag[0])
-            poses = []
-            fps = video.get(cv2.CAP_PROP_FPS)
-            video_length = video.get(cv2.CAP_PROP_FRAME_COUNT)
-            ret, img = video.read()
-            i = 0
-            while ret:
-                start = time.time()
-                img = cv2.resize(img, (self.cam_width, self.cam_height))
-                cv2.waitKey(1)
-                _, pose, _ = self.get_frame(img)
-
-                if pose is not None:
-                    poses.append(pose)
-
-                n_skip = int((time.time() - start) * fps)
-                for _ in range(n_skip):
-                    _, _ = video.read()
-                    i += 1
-
-                ret, img = video.read()
-                self.log("{:.2f}%".format((i / (video_length - 1)) * 100))
-                i += 1
-            self.log("100%")
-            video.release()
-            flag = flag[0].split('/')[-1].split('.')[0]  # between / and .
-            data = np.stack(poses)
-            data = data[:(len(data) - (len(data) % self.window_size))]
-            data = data[list(range(0, len(data), int(len(data) / self.window_size)))]
-
+        # else:
+        #     if not os.path.exists(flag[0]):
+        #         self.log("Video file does not exist!")
+        #         return
+        #     # self.cap.release()
+        #     video = cv2.VideoCapture(flag[0])
+        #     poses = []
+        #     fps = video.get(cv2.CAP_PROP_FPS)
+        #     video_length = video.get(cv2.CAP_PROP_FRAME_COUNT)
+        #     ret, img = video.read()
+        #     i = 0
+        #     while ret:
+        #         start = time.time()
+        #         img = cv2.resize(img, (self.cam_width, self.cam_height))
+        #         cv2.waitKey(1)
+        #         _, pose, _ = self.get_frame(img)
+        #
+        #         if pose is not None:
+        #             poses.append(pose)
+        #
+        #         n_skip = int((time.time() - start) * fps)
+        #         for _ in range(n_skip):
+        #             _, _ = video.read()
+        #             i += 1
+        #
+        #         ret, img = video.read()
+        #         self.log("{:.2f}%".format((i / (video_length - 1)) * 100))
+        #         i += 1
+        #     self.log("100%")
+        #     video.release()
+        #     flag = flag[0].split('/')[-1].split('.')[0]  # between / and .
+        #     data = np.stack(poses)
+        #     data = data[:(len(data) - (len(data) % self.window_size))]
+        #     data = data[list(range(0, len(data), int(len(data) / self.window_size)))]
         self.log("Success!")
-        data = (data, flag)
-        self.ar.train(data)
+        inp = {"flag": flag,
+               "data": {"imgs": np.stack([x[0] for x in data])}}
+        if self.input_type in ["skeleton", "hybrid"]:
+            inp["data"]["poses"] = np.stack([x[1] for x in data])
+        self.ar.train(inp)
 
     def save(self):
         with open('assets/saved/support_set.pkl', 'wb') as outfile:
             pkl.dump(self.ar.support_set, outfile)
-        with open('assets/saved/support_labels.pkl', 'wb') as outfile:
-            pkl.dump(self.ar.support_labels, outfile)
         with open('assets/saved/requires_focus.pkl', 'wb') as outfile:
             pkl.dump(self.ar.requires_focus, outfile)
 
     def load(self):
         with open('assets/saved/support_set.pkl', 'rb') as pkl_file:
             self.ar.support_set = pkl.load(pkl_file)
-        with open('assets/saved/support_labels.pkl', 'rb') as pkl_file:
-            self.ar.support_labels = pkl.load(pkl_file)
         with open('assets/saved/requires_focus.pkl', 'rb') as pkl_file:
             self.ar.requires_focus = pkl.load(pkl_file)
-        self.ar.n_classes = len(list(filter(lambda x: x is not None, self.ar.support_labels)))
-        print("Loaded", self.ar.n_classes, "classes")
+        self.log(f"Loaded {len(self.ar.support_set)} classes")
 
 
 def run_module(module, configurations, input_queue, output_queue):
