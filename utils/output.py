@@ -211,7 +211,7 @@ class VISPYVisualizer:
 
                 bar_height = 0.075
                 self.values[r].label = "{}%".format(int(score*100))
-                score = score*0.9  # To avoid to reach the right limit
+                score = score * 0.9  # To avoid to reach the right limit
                 self.values[r].pos = 0.5 + (score/4 if score/2 > bar_height else bar_height/2), \
                                      0.7 - (0.1 * i) - bar_height/2
                 self.values[r].size = (score/2 if score/2 > bar_height else bar_height, bar_height)

@@ -20,19 +20,35 @@ class EpisodicLoader(data.Dataset):
 
     def get_random_sample(self, class_name):
         sequences = next(os.walk(os.path.join(self.path, class_name)))[1]  # Just list of directories
+
         path = random.sample(sequences, 1)[0]  # Get first random file
         path = os.path.join(self.path, class_name, path)  # Create full path
 
-        imgs = []
+        imgs = [0]
         poses = []
-        for i in range(self.l):
-            with open(os.path.join(path, f"{i}.pkl"), 'rb') as file:
-                poses.append(pickle.load(file))
-            img = cv2.imread(os.path.join(path, f"{i}.png"))
-            img = cv2.resize(img, (224, 224))
-            img = img / 255.
-            img = img * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
-            imgs.append(img)
+        i = 0
+        while True:
+            try:
+                with open(os.path.join(path, f"{i}.pkl"), 'rb') as file:
+                    data = pickle.load(file)
+                    poses.append(data)
+                    i += 1
+                if len(poses) == self.l:
+                    break
+            except Exception as e:
+                print("MYEXCEPTION:", path, e)
+                path = random.sample(sequences, 1)[0]  # Get first random file
+                path = os.path.join(self.path, class_name, path)  # Create full path
+
+                imgs = [0]
+                poses = []
+                i = 0
+
+            #     img = cv2.imread(os.path.join(path, f"{i}.png"))
+            #     img = cv2.resize(img, (224, 224))
+            #     img = img / 255.
+            #     img = img * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
+            #     imgs.append(img)
 
         return np.stack(imgs), np.stack(poses)
 

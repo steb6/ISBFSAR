@@ -147,7 +147,7 @@ def read_openpose_data(received_data):
                                 face_person.append(face_part)
                         else:
                             body_part = [part.get(1).asDouble(), part.get(2).asDouble(), part.get(3).asDouble()]
-                body_person.append(body_part)
+			    body_person.append(body_part)
 
                 if body_person and face_person:
                     body.append(body_person)

@@ -15,6 +15,10 @@ from utils.output import VISPYVisualizer
 from multiprocessing import Process, Queue
 
 
+# TODO ar should not compute prototypes every time
+# TODO visualize heatmap activation when debugging support set
+
+
 class ISBFSAR:
     def __init__(self, args, visualizer=True, video_input=None):
         self.input_type = args.input_type

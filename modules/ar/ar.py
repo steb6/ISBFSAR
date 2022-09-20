@@ -47,7 +47,7 @@ class ActionRecognizer:
         # Predict actual action
         data = [torch.stack([i[j] for i in self.previous_frames]) for j in range(len(self.previous_frames[0]))]
         labels = torch.IntTensor(list(range(self.way))).unsqueeze(0).cuda()
-        ss = []
+        ss = []  # TODO INFERENCE SHOULD NOT COMPUTE PROTOTYPES EVERY TIME
         if self.input_type in ["skeleton", "hybrid"]:
             ss.append(torch.stack([self.support_set[c]["poses"] for c in self.support_set.keys()]))
             ss = [x.reshape(*x.shape[:-2], -1).unsqueeze(0) for x in ss]
@@ -58,7 +58,7 @@ class ActionRecognizer:
         pad = torch.zeros_like(ss[0])
         while ss[0].shape[1] < 5:
             ss[0] = torch.concat((ss[0], pad), dim=1)
-        outputs = self.ar(ss, labels, data)  # TODO INFERENCE SHOULD NOT COMPUTE PROTOTYPES EVERY TIME
+        outputs = self.ar(ss, labels, data)
 
         # Softmax
         few_shot_result = torch.softmax(outputs['logits'].squeeze(0), dim=0).detach().cpu().numpy()

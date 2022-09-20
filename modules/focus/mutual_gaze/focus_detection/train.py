@@ -2,8 +2,8 @@ import torch.optim
 from torch.nn import BCELoss
 import wandb
 from torchvision import transforms
-from modules.focus.mutual_gaze.focus_detection.utils.MARIADataset import MARIAData
-from modules.focus.mutual_gaze.focus_detection.utils.model import MutualGazeDetectorHeads as Model
+from modules.focus.mutual_gaze.focus_detection.utils.my_dataloader import MARIAData
+from modules.focus.mutual_gaze.focus_detection.utils.model import JustOpenPose as Model
 from tqdm import tqdm
 from sklearn import metrics
 import platform
@@ -15,7 +15,7 @@ if __name__ == "__main__":
     is_local = "Windows" in platform.platform()
 
     config = MutualGazeConfig()
-    dataset = "D:/datasets/useless/"+config.dataset if is_local else "../"+config.dataset
+    dataset = "D:/datasets/mutualGaze_dataset" if is_local else "../mutualGaze_dataset"
 
     all_losses = []
     all_accuracies = []
@@ -24,22 +24,21 @@ if __name__ == "__main__":
     all_f1s = []
 
     for sess in range(5):
-        train_data = MARIAData(dataset, mode="train", split_number=sess, augmentation_size=config.augmentation_size,
-                               model=config.model)
+        train_data = MARIAData(dataset, mode="train", split_number=sess)
         train_loader = torch.utils.data.DataLoader(train_data, batch_size=config.batch_size,
                                                    num_workers=2 if is_local else 12, shuffle=True)
-        valid_data = MARIAData(dataset, mode="valid", split_number=sess, model=config.model)
+        valid_data = MARIAData(dataset, mode="valid", split_number=sess)
         valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=32,
                                                    num_workers=2 if is_local else 4)
-        test_data = MARIAData(dataset, mode="test", split_number=sess, model=config.model)
+        test_data = MARIAData(dataset, mode="test", split_number=sess)
         test_loader = torch.utils.data.DataLoader(test_data, batch_size=32,
                                                   num_workers=2 if is_local else 2)
 
-        model = Model(config.model, config.pretrained)
+        model = Model()
         model.cuda()
         model.train()
-        for params in model.backbone.parameters():  # Freeze weights
-            params.requires_grad = False
+        # for params in model.backbone.parameters():  # Freeze weights
+        #     params.requires_grad = False
 
         loss_fn = BCELoss()
         optimizer = torch.optim.SGD(model.parameters(), lr=config.lr, momentum=0.9, weight_decay=1e-5)
@@ -76,10 +75,10 @@ if __name__ == "__main__":
         how_many = 10
         layers = 0
         for epoch in range(config.n_epochs):
-            if epoch % after == 0 and epoch > 0:
-                for k in range(how_many):
-                    list(model.backbone.parameters())[(-int(epoch/after)*how_many)-k].requires_grad = True
-                    layers += 1
+            # if epoch % after == 0 and epoch > 0:
+            #     for k in range(how_many):
+            #         list(model.backbone.parameters())[(-int(epoch/after)*how_many)-k].requires_grad = True
+            #         layers += 1
 
             # TRAIN
             train_losses = []
@@ -89,13 +88,14 @@ if __name__ == "__main__":
             train_f1s = []
             outs = []
             model.train()
-            for (x, _), y in tqdm(train_loader, desc="Train epoch {}".format(epoch)):
-                x = x.permute(0, 3, 1, 2)
+            for img, pose, img_, x, y in tqdm(train_loader, desc="Train epoch {}".format(epoch)):
                 x = x.cuda().float()
-                y = y.cuda()
+                y = y.cuda().float()
 
                 out = model(x)
                 outs.append(out.detach().cpu().numpy())
+                if torch.any(torch.isnan(out)):
+                    print(out, y.float().unsqueeze(-1))
                 loss = loss_fn(out, y.float().unsqueeze(-1))
                 loss.backward()
                 optimizer.step()
@@ -117,10 +117,9 @@ if __name__ == "__main__":
                 valid_recalls = []
                 valid_f1s = []
                 model.eval()
-                for (x, _), y in tqdm(valid_loader, desc="Valid epoch {}".format(epoch)):
-                    x = x.permute(0, 3, 1, 2)
+                for img, pose, img_, x, y in tqdm(valid_loader, desc="Valid epoch {}".format(epoch)):
                     x = x.cuda().float()
-                    y = y.cuda()
+                    y = y.cuda().float()
 
                     out = model(x)
                     outs.append(out.detach().cpu().numpy())

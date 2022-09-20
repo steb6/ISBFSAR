@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import numpy as np
+
 import math
 
 # image
@@ -26,18 +26,18 @@ def compute_centroid(points):
     return [mean_x, mean_y]
 
 
-def get_eye_bbox_openpose(pose, conf_pose, offset_size):
+def get_eye_bbox_openpose(pose, conf_pose):
     n_joints_set = [pose[joint] for joint in JOINTS_POSE if joint_set(pose[joint], conf_pose[joint])]
     if n_joints_set:
         min_x = min([joint[0] for joint in n_joints_set])
         max_x = max([joint[0] for joint in n_joints_set])
-        min_x -= (max_x - min_x) * offset_size
-        max_x += (max_x - min_x) * offset_size
+        min_x -= (max_x - min_x) * 0.4
+        max_x += (max_x - min_x) * 0.4
 
         min_y = min([joint[1] for joint in n_joints_set])
         max_y = max([joint[1] for joint in n_joints_set])
-        min_y -= (max_y - min_y) * offset_size
-        max_y += (max_y - min_y) * offset_size
+        min_y -= (max_y - min_y) * 0.4
+        max_y += (max_y - min_y) * 0.4
 
         min_x = math.floor(max(0, min(min_x, IMAGE_WIDTH)))
         max_x = math.floor(max(0, min(max_x, IMAGE_WIDTH)))

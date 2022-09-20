@@ -1,6 +1,6 @@
 import platform
 
-input_type = "rgb"  # rgb, skeleton or hybrid
+input_type = "skeleton"  # rgb, skeleton or hybrid
 seq_len = 8 if input_type == "rgb" else 16  # 8 for rgb and 16 for skeleton
 
 
@@ -55,19 +55,19 @@ class TRXConfig(object):
         self.device = 'cuda'
 
         # CHOICE DATASET
-        self.data_path = "D:\\datasets\\test"
+        self.data_path = "D:\\datasets\\NTURGBD_to_YOLO_METRO" if not ubuntu else "../datasets/NTURGBD_to_YOLO_METRO"
         self.n_joints = 30
 
         # TRAINING
         self.initial_lr = 1e-2 if self.input_type == "skeleton" else 1e-3
         self.n_task = (100 if self.input_type == "skeleton" else 30) if not ubuntu else (10000 if self.input_type == "skeleton" else 100)
         self.optimize_every = 16  # Put to 1 if not used, not 0 or -1!
-        self.batch_size = 1 if not ubuntu else (32 if self.input_type == "skeleton" else 4)
+        self.batch_size = 3 if not ubuntu else (32 if self.input_type == "skeleton" else 4)
         self.n_epochs = 10000
         self.start_discriminator_after_epoch = 0  # self.n_epochs  # TODO CAREFUL
         self.first_mile = self.n_epochs  # 15 TODO CAREFUL
         self.second_mile = self.n_epochs  # 1500 TODO CAREFUL
-        self.n_workers = 0 if not ubuntu else 20
+        self.n_workers = 0 if not ubuntu else 16
 
         self.log_every = 10 if not ubuntu else 1000
         self.trans_linear_in_dim = 256 if self.input_type == "skeleton" else 1000

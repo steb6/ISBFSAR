@@ -48,10 +48,12 @@ if __name__ == "__main__":
 
     # Get model
     model = TRXOS(args).to(device)
-    model.distribute_model()  # TODO TEST
+    if args.input_type in ["rgb"] and ubuntu:
+        model.distribute_model()
 
     # Create dataset iterator
     train_data = EpisodicLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type,)
+    data_index = 0 if args.input_type == "rgb" else 1  # TODO MAKE IT HYBRID
 
     # Divide dataset into train and validation
     classes = train_data.classes
@@ -108,19 +110,21 @@ if __name__ == "__main__":
             #     first = elem  # TODO REMOVE DEBUG
             # elem = first  # TODO REMOVE DEBUG
 
-            support_set = elem['support_set'].float().to(device)
-            target_set = elem['target_set'].float().to(device)
-            unknown_set = elem['unknown_set'].float().to(device)
+            support_set = torch.stack([x[data_index] for x in elem['support_set']], dim=1).float().to(device)
+            target_set = elem['target_set'][data_index].float().to(device)
+            unknown_set = elem['unknown_set'][data_index].float().to(device)
 
             batch_size = support_set.size(0)
 
             # TODO START MOVE IN DATALOADER
-            # support_set = support_set.reshape(batch_size, args.way, args.seq_len, args.n_joints * 3).cuda().float()
-            # target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-            # unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-            support_set = torch.permute(support_set, (0, 1, 2, 5, 3, 4))
-            target_set = torch.permute(target_set, (0, 1, 4, 2, 3))
-            unknown_set = torch.permute(unknown_set, (0, 1, 4, 2, 3))
+            if args.input_type == "skeleton":
+                support_set = support_set.reshape(batch_size, args.way, args.seq_len, args.n_joints * 3).cuda().float()
+                target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
+                unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
+            elif args.input_type == "rgb":
+                support_set = torch.permute(support_set, (0, 1, 2, 5, 3, 4))
+                target_set = torch.permute(target_set, (0, 1, 4, 2, 3))
+                unknown_set = torch.permute(unknown_set, (0, 1, 4, 2, 3))
             # TODO END MOVE IN DATALOADER
 
             support_labels = torch.arange(args.way).repeat(batch_size).reshape(batch_size, args.way).to(device).int()
@@ -131,7 +135,7 @@ if __name__ == "__main__":
             ################
             # Known action #
             ################
-            out = model(support_set, support_labels, target_set)
+            out = model([support_set], support_labels, [target_set])
 
             # FS known
             fs_pred = out['logits']
@@ -144,7 +148,7 @@ if __name__ == "__main__":
 
             # print("Loss is", known_fs_loss.item(), "out is", fs_pred.detach().cpu().numpy())
 
-            if epoch > args.start_discriminator_after_epoch:
+            if epoch > args.start_discriminator_after_epoch-1:
                 # OS known (target depends on true class)
                 os_pred = out['is_true']
                 os_outs.append(os_pred.detach().cpu().numpy())
@@ -171,7 +175,7 @@ if __name__ == "__main__":
                     ##################
                     # Unknown action #
                     ##################
-                    out = model(support_set, support_labels, unknown_set)
+                    out = model([support_set], support_labels, [unknown_set])
 
                     # OS unknown
                     os_pred = out['is_true']
