@@ -4,6 +4,7 @@ import torch.utils.data as data
 import random
 import numpy as np
 import cv2
+from utils.params import seq_len
 
 
 # https://rose1.ntu.edu.sg/dataset/actionRecognition/
@@ -23,33 +24,34 @@ class EpisodicLoader(data.Dataset):
 
         path = random.sample(sequences, 1)[0]  # Get first random file
         path = os.path.join(self.path, class_name, path)  # Create full path
-
-        imgs = [0]
+        imgs = []
         poses = []
         i = 0
-        while True:
+        while True:  # Load one image at time
             try:
                 with open(os.path.join(path, f"{i}.pkl"), 'rb') as file:
-                    data = pickle.load(file)
-                    poses.append(data)
+                    # Load skeleton
+                    pose = pickle.load(file)
+                    poses.append(pose.reshape(-1))
+                    # Load image
+                    img = cv2.imread(os.path.join(path, f"{i}.png"))
+                    img = cv2.resize(img, (224, 224))
+                    img = img / 255.
+                    img = img * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
+                    imgs.append(img.swapaxes(-1, -2).swapaxes(-2, -3))
                     i += 1
                 if len(poses) == self.l:
                     break
             except Exception as e:
-                print("MYEXCEPTION:", path, e)
+                print("[ERROR]: Erase this directory:", path, e)
+                # Reset
                 path = random.sample(sequences, 1)[0]  # Get first random file
                 path = os.path.join(self.path, class_name, path)  # Create full path
-
-                imgs = [0]
+                imgs = []
                 poses = []
                 i = 0
-
-            #     img = cv2.imread(os.path.join(path, f"{i}.png"))
-            #     img = cv2.resize(img, (224, 224))
-            #     img = img / 255.
-            #     img = img * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
-            #     imgs.append(img)
-
+        if seq_len == 8:
+            return np.stack(imgs)[list(range(0, 16, 2))], np.stack(poses)[list(range(0, 16, 2))]
         return np.stack(imgs), np.stack(poses)
 
     def __getitem__(self, _):  # Must return complete, imp_x and impl_y
@@ -61,12 +63,15 @@ class EpisodicLoader(data.Dataset):
         target_set = self.get_random_sample(target_class)
         unknown_set = self.get_random_sample(unknown_class)
 
-        return {'support_set': support_set,
-                'target_set': target_set,
-                'unknown_set': unknown_set,
-                'support_classes': support_classes,
-                'target_class': target_class,
-                'unknown_class': unknown_class}
+        return {'support_set': {"rgb": np.stack([x[0] for x in support_set]),
+                                "sk": np.stack([x[1] for x in support_set])},
+                'target_set': {"rgb": target_set[0],
+                               "sk": target_set[1]},
+                'unknown_set': {"rgb": unknown_set[0],
+                                "sk": unknown_set[1]},
+                'support_classes': np.stack([self.classes.index(elem) for elem in support_classes]),
+                'target_class': self.classes.index(target_class),
+                'unknown_class': self.classes.index(unknown_class)}
 
     def __len__(self):
         return self.n_task
@@ -142,18 +147,17 @@ if __name__ == "__main__":
     loader = EpisodicLoader(TRXConfig().data_path, input_type="hybrid")
     vis = MPLPosePrinter()
 
-    for elem in loader:
-        sup = elem['support_set']
-        trg = elem['target_set']
-        unk = elem['unknown_set']
+    for asd in loader:
+        sup = asd['support_set']
+        trg = asd['target_set']
+        unk = asd['unknown_set']
 
-        print(elem['support_classes'])
+        print(asd['support_classes'])
         for c in range(5):
-            for i in range(16):
-                cv2.imshow("sup", sup[c][0][i])
+            for k in range(16):
+                cv2.imshow("sup", sup[c][0][k])
                 cv2.waitKey(1)
 
                 vis.clear()
-                vis.print_pose(sup[c][1][i], edges)
+                vis.print_pose(sup[c][1][k], edges)
                 vis.sleep(0.01)
-

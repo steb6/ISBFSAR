@@ -16,6 +16,7 @@ import numpy as np
 
 
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
+# srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gpus-per-node=4 --cpus-per-task=32 --mem=8G bash
 
 # gpu_id = 1 if ubuntu else 0
 # torch.cuda.set_device(gpu_id)
@@ -25,6 +26,8 @@ device = TRXConfig().device
 
 if __name__ == "__main__":
     args = TRXConfig()
+
+    b = args.batch_size
 
     # Get conversion class id -> class label
     test_classes = ["A1", "A7", "A13", "A19", "A25", "A31", "A37", "A43", "A49", "A55", "A61", "A67", "A73", "A79",
@@ -48,26 +51,15 @@ if __name__ == "__main__":
 
     # Get model
     model = TRXOS(args).to(device)
-    if args.input_type in ["rgb"] and ubuntu:
+    if args.input_type in ["rgb", "hybrid"] and ubuntu:
+        print("Model has been distributed over multiple GPUs")
         model.distribute_model()
 
     # Create dataset iterator
     train_data = EpisodicLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type,)
-    data_index = 0 if args.input_type == "rgb" else 1  # TODO MAKE IT HYBRID
 
-    # Divide dataset into train and validation
-    classes = train_data.classes
-    inv_class_dict = {v: k for k, v in class_dict.items()}
-    filtered_classes = []
-    for elem in classes:
-        if elem in test_classes:  # DONT ADD IF THE ACTION IS PART OF SUPPORT SET
-            continue
-        class_id = int(inv_class_dict[elem][1:])
-        if "metrabs" in args.data_path:  # we dont have two actions for metrabs, but for NTURGBD yes
-            if 50 <= class_id <= 60 or class_id >= 106:  # DONT ADD IF ACTION INVOLVES TWO PERSON
-                continue
-        filtered_classes.append(elem)
-    train_data.classes = filtered_classes
+    # Exclude test classes and create iterator
+    train_data.classes = list(filter(lambda x: x not in test_classes, train_data.classes))
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, num_workers=args.n_workers,
                                                shuffle=True)
 
@@ -102,40 +94,20 @@ if __name__ == "__main__":
 
         # TRAIN
         model.train()
-        torch.set_grad_enabled(True)
-        # first = None  # TODO REMOVE DEBUG
         for i, elem in enumerate(tqdm(train_loader)):
 
-            # if first is None:  # TODO REMOVE DEBUG
-            #     first = elem  # TODO REMOVE DEBUG
-            # elem = first  # TODO REMOVE DEBUG
+            # Extract from dict, convert, move to GPU
+            support_set = [elem['support_set'][t].float().to(device) for t in elem['support_set'].keys()]
+            target_set = [elem['target_set'][t].float().to(device) for t in elem['target_set'].keys()]
+            unknown_set = [elem['unknown_set'][t].float().to(device) for t in elem['unknown_set'].keys()]
 
-            support_set = torch.stack([x[data_index] for x in elem['support_set']], dim=1).float().to(device)
-            target_set = elem['target_set'][data_index].float().to(device)
-            unknown_set = elem['unknown_set'][data_index].float().to(device)
-
-            batch_size = support_set.size(0)
-
-            # TODO START MOVE IN DATALOADER
-            if args.input_type == "skeleton":
-                support_set = support_set.reshape(batch_size, args.way, args.seq_len, args.n_joints * 3).cuda().float()
-                target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-                unknown_set = unknown_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-            elif args.input_type == "rgb":
-                support_set = torch.permute(support_set, (0, 1, 2, 5, 3, 4))
-                target_set = torch.permute(target_set, (0, 1, 4, 2, 3))
-                unknown_set = torch.permute(unknown_set, (0, 1, 4, 2, 3))
-            # TODO END MOVE IN DATALOADER
-
-            support_labels = torch.arange(args.way).repeat(batch_size).reshape(batch_size, args.way).to(device).int()
-            target = np.array(elem['support_classes']).T == \
-                     np.repeat(np.array(elem['target_class']), 5).reshape(batch_size, args.way)
-            target = torch.FloatTensor(target).to(device)
+            support_labels = torch.arange(args.way).repeat(b).reshape(b, args.way).to(device).int()
+            target = (elem['support_classes'] == elem['target_class'][..., None]).float().to(device)
 
             ################
             # Known action #
             ################
-            out = model([support_set], support_labels, [target_set])
+            out = model(support_set, support_labels, target_set)
 
             # FS known
             fs_pred = out['logits']
@@ -145,8 +117,6 @@ if __name__ == "__main__":
 
             train_accuracy = torch.eq(torch.argmax(fs_pred, dim=1), torch.argmax(target, dim=1)).float().mean().item()
             fs_train_accuracies.append(train_accuracy)
-
-            # print("Loss is", known_fs_loss.item(), "out is", fs_pred.detach().cpu().numpy())
 
             if epoch > args.start_discriminator_after_epoch-1:
                 # OS known (target depends on true class)
@@ -175,7 +145,7 @@ if __name__ == "__main__":
                     ##################
                     # Unknown action #
                     ##################
-                    out = model([support_set], support_labels, [unknown_set])
+                    out = model(support_set, support_labels, unknown_set)
 
                     # OS unknown
                     os_pred = out['is_true']

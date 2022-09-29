@@ -6,18 +6,22 @@ from facenet_pytorch.models.inception_resnet_v1 import InceptionResnetV1
 class JustOpenPose(torch.nn.Module):
     def __init__(self):
         super(JustOpenPose, self).__init__()
-        self.layer1 = torch.nn.Linear(14*3, 256)
+        self.layer1 = torch.nn.Linear(14*2, 128)
         self.act1 = torch.nn.ReLU()
-        self.layer2 = torch.nn.Linear(256, 64)
+        self.drop1 = torch.nn.Dropout(0.1)
+        self.layer2 = torch.nn.Linear(128, 64)
         self.act2 = torch.nn.ReLU()
+        self.drop2 = torch.nn.Dropout(0.1)
         self.layer3 = torch.nn.Linear(64, 1)
         self.act3 = torch.nn.Sigmoid()
 
     def forward(self, x):
         x = self.layer1(x)
         x = self.act1(x)
+        x = self.drop1(x)
         x = self.layer2(x)
         x = self.act2(x)
+        x = self.drop2(x)
         x = self.layer3(x)
         x = self.act3(x)
         return x

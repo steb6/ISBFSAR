@@ -1,7 +1,7 @@
 import platform
 
-input_type = "skeleton"  # rgb, skeleton or hybrid
-seq_len = 8 if input_type == "rgb" else 16  # 8 for rgb and 16 for skeleton
+input_type = "hybrid"  # rgb, skeleton or hybrid
+seq_len = 8
 
 
 ubuntu = platform.system() == "Linux"
@@ -59,18 +59,19 @@ class TRXConfig(object):
         self.n_joints = 30
 
         # TRAINING
-        self.initial_lr = 1e-2 if self.input_type == "skeleton" else 1e-3
-        self.n_task = (100 if self.input_type == "skeleton" else 30) if not ubuntu else (10000 if self.input_type == "skeleton" else 100)
-        self.optimize_every = 16  # Put to 1 if not used, not 0 or -1!
-        self.batch_size = 3 if not ubuntu else (32 if self.input_type == "skeleton" else 4)
+        self.initial_lr = 1e-2 if self.input_type == "skeleton" else 3e-4
+        self.n_task = (100 if self.input_type == "skeleton" else 30) if not ubuntu else (10000 if self.input_type == "skeleton" else 500)
+        self.optimize_every = 1  # Put to 1 if not used, not 0 or -1!
+        self.batch_size = 4  # 1 if not ubuntu else (32 if self.input_type == "skeleton" else 4)
         self.n_epochs = 10000
         self.start_discriminator_after_epoch = 0  # self.n_epochs  # TODO CAREFUL
         self.first_mile = self.n_epochs  # 15 TODO CAREFUL
         self.second_mile = self.n_epochs  # 1500 TODO CAREFUL
         self.n_workers = 0 if not ubuntu else 16
-
         self.log_every = 10 if not ubuntu else 1000
-        self.trans_linear_in_dim = 256 if self.input_type == "skeleton" else 1000
+
+        # MODEL
+        self.trans_linear_in_dim = 256 if self.input_type == "skeleton" else 1000 if self.input_type == "rgb" else 512
         self.trans_linear_out_dim = 128
         self.query_per_class = 1
         self.trans_dropout = 0.
@@ -130,8 +131,8 @@ class MutualGazeConfig:
         self.dataset = "focus_dataset_heads"
         self.model = "facenet"  # facenet, resnet
 
-        self.batch_size = 32
-        self.lr = 1e-6
+        self.batch_size = 8
+        self.lr = 1e-6  # TODO TRY TO REDUCE LEARNING RATE
         self.log_every = 10
         self.pretrained = True
         self.n_epochs = 1000

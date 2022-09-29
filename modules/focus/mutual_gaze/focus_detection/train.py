@@ -94,8 +94,6 @@ if __name__ == "__main__":
 
                 out = model(x)
                 outs.append(out.detach().cpu().numpy())
-                if torch.any(torch.isnan(out)):
-                    print(out, y.float().unsqueeze(-1))
                 loss = loss_fn(out, y.float().unsqueeze(-1))
                 loss.backward()
                 optimizer.step()
@@ -153,6 +151,7 @@ if __name__ == "__main__":
             if score > best_f1:
                 best_f1 = score
                 best_model = model.state_dict()
+                torch.save(best_model, "sess_{}_f1_{:.2f}.pth".format(sess, best_f1))
 
             # Check patience
             # valid_loss = sum(valid_losses) / len(valid_losses)

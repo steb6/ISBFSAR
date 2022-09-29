@@ -4,7 +4,8 @@ from torch import nn
 from itertools import combinations
 from torch.autograd import Variable
 from torchvision.models import resnet50, ResNet
-from torchvision.models.resnet import Bottleneck
+from torchvision.models.resnet import Bottleneck, resnet18
+from utils.params import ubuntu
 
 NUM_SAMPLES = 1
 
@@ -204,6 +205,18 @@ class Discriminator(torch.nn.Module):
         return y
 
 
+class PostResNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.act1 = torch.nn.ReLU()
+        self.l1 = torch.nn.Linear(1000, 256)
+
+    def forward(self, x):
+        x = self.act1(x)
+        x = self.l1(x)
+        return x
+
+
 class TRXOS(nn.Module):
 
     class myresnet50(ResNet):
@@ -251,14 +264,14 @@ class TRXOS(nn.Module):
         self.args = args
 
         self.trans_linear_in_dim = args.trans_linear_in_dim
-        if args.input_type == "skeleton":
-            self.features_extractor = MLP(args.n_joints * 3,
-                                          args.n_joints * 3 * 2, self.trans_linear_in_dim)
-        if args.input_type == "rgb":
+        self.features_extractor = nn.ModuleDict()
+        if args.input_type in ["skeleton", "hybrid"]:
+            self.features_extractor['sk'] = MLP(args.n_joints * 3, args.n_joints * 3 * 2, 256)
+        if args.input_type in ["rgb", "hybrid"]:
             if add_hook:
-                self.features_extractor = self.myresnet50(pretrained=True)
+                self.features_extractor["rgb"] = self.myresnet50(pretrained=True)
             else:
-                self.features_extractor = resnet50(pretrained=True)
+                self.features_extractor["rgb"] = resnet50(pretrained=True)
 
         self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s, add_hook=add_hook) for s in args.temp_set])
 
@@ -270,17 +283,21 @@ class TRXOS(nn.Module):
         if self.model == "EXP":
             self.discriminator = torch.exp
 
-    def forward(self, context_images, context_labels, target_images):
-        context_images, target_images = context_images[0], target_images[0]  # ADD HYBRID PART
-        b = context_images.size(0)
-        if self.args.input_type == "rgb":
-            b, k, l, c, h, w = context_images.size()
-            context_features = self.features_extractor(context_images.reshape(-1, c, h, w)).reshape(b, k, l, -1)
-            target_features = self.features_extractor(target_images.reshape(-1, c, h, w)).reshape(b, l, -1)
-        else:
-            context_features = self.features_extractor(context_images)
-            target_features = self.features_extractor(target_images)
+        self.post_resnet = PostResNet()
 
+    def forward(self, context_images, context_labels, target_images):
+        b, k, l, c, h, w = context_images[0].size()
+        context_features_rgb = self.features_extractor['rgb'](context_images[0].reshape(-1, c, h, w)).reshape(b, k, l, -1)
+        target_features_rgb = self.features_extractor['rgb'](target_images[0].reshape(-1, c, h, w)).reshape(b, l, -1)
+        context_features_sk = self.features_extractor['sk'](context_images[1])
+        target_features_sk = self.features_extractor['sk'](target_images[1])
+
+        # Post ResNet
+        context_features_rgb = self.post_resnet(context_features_rgb)
+        target_features_rgb = self.post_resnet(target_features_rgb)
+
+        context_features = torch.concat((context_features_rgb, context_features_sk), dim=-1)
+        target_features = torch.concat((target_features_rgb, target_features_sk), dim=-1)
         target_features = target_features.unsqueeze(1)
         out = self.transformers[0](context_features, context_labels, target_features)
         all_logits = out['logits']
@@ -297,9 +314,10 @@ class TRXOS(nn.Module):
         :return: Nothing
         """
         if self.args.num_gpus > 1:
-            self.features_extractor.cuda(0)
-            self.features_extractor = torch.nn.DataParallel(self.features_extractor, device_ids=[i for i in range(0, self.args.num_gpus)])
-            self.features_extractor.cuda(0)
+            self.features_extractor["rgb"].cuda(0)
+            self.features_extractor["rgb"] = torch.nn.DataParallel(self.features_extractor["rgb"],
+                                                                   device_ids=[i for i in range(0, self.args.num_gpus)])
+            self.features_extractor["rgb"].cuda(0)
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ class ActionRecognizer:
         """
         It receives an iterable of data that contains poses, images or both
         """
-        if data is None:
+        if data is None or len(data) == 0:
             return {}, 0
 
         if len(self.support_set) == 0:  # no class to predict

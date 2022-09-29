@@ -256,7 +256,7 @@ class ISBFSAR:
             res = self.get_frame()
             if self.input_type in ["skeleton", "hybrid"]:
                 if "pose" in res.keys() and res["pose"] is not None:
-                    data.append((res["img_preprocessed"], res["pose"]))
+                    data.append((res["pose"],))
             else:
                 data.append((res["img_preprocessed"],))
             self.log("{:.2f}%".format((i / (self.window_size - 1)) * 100))
@@ -305,7 +305,7 @@ class ISBFSAR:
         inp = {"flag": flag,
                "data": {"imgs": np.stack([x[0] for x in data])}}
         if self.input_type in ["skeleton", "hybrid"]:
-            inp["data"]["poses"] = np.stack([x[1] for x in data])
+            inp["data"]["poses"] = np.stack([x[0] for x in data])
         self.ar.train(inp)
 
     def save(self):
