@@ -4,7 +4,7 @@ import torch.utils.data as data
 import random
 import numpy as np
 import cv2
-from utils.params import seq_len
+from utils.params import seq_len, ubuntu
 
 
 # https://rose1.ntu.edu.sg/dataset/actionRecognition/
@@ -77,62 +77,65 @@ class EpisodicLoader(data.Dataset):
         return self.n_task
 
 
-class TestMetrabsData(data.Dataset):
-    # Test classes: classes to add in support set
-    # Os classes: other class to consider (together with test classes)
+class FSOSEpisodicLoader(data.Dataset):
+    def __init__(self, queries_path, exemplars_path, support_classes, l=16, input_type="hybrid"):
+        self.queries_path = queries_path
+        self.exemplars_path = exemplars_path
+        self.all_test_classes = next(os.walk(self.exemplars_path))[1]
+        self.support_classes = [next(os.walk(self.exemplars_path))[1][i] for i in support_classes]
+        self.l = l
+        self.input_type = input_type
+        self.queries = []
+        for query_class in self.all_test_classes:
+            for class_dir in next(os.walk(os.path.join(queries_path, query_class)))[1]:
+                self.queries.append(os.path.join(queries_path, query_class, class_dir))
+        self.support_set = [self.load_sample(os.path.join(self.exemplars_path, cl, "0")) for cl in self.support_classes]
+        self.tapullo = None
 
-    def __init__(self, samples_path, exemplars_path, test_classes, os_classes):
-        self.exemplars_classes = test_classes  # next(os.walk(exemplars_path))[1]
-        exemplars_files = [os.path.join(exemplars_path, elem) for elem in self.exemplars_classes]
-        self.exemplars_poses = []
-        for example in exemplars_files:
-            with open(os.path.join(example, '0.pkl'), 'rb') as file:
-                elem = pickle.load(file)
-            self.exemplars_poses.append(elem)
-        self.exemplars_poses = np.stack(self.exemplars_poses)
-        self.target_set = []
-        self.target_classes = []
-        self.target_names = []
-        self.support_names = test_classes
-        self.unknowns = []
-        self.unknowns_names = []
+    def load_sample(self, path):
+        imgs = []
+        poses = []
+        i = 0
+        while True:  # Load one image at time
+            with open(os.path.join(path, f"{i}.pkl"), 'rb') as file:
+                # Load skeleton
+                pose = pickle.load(file)
+                poses.append(pose.reshape(-1))
+                # Load image
+                img = cv2.imread(os.path.join(path, f"{i}.png"))
+                img = cv2.resize(img, (224, 224))
+                img = img / 255.
+                img = img * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
+                imgs.append(img.swapaxes(-1, -2).swapaxes(-2, -3))
+                i += 1
+            if len(poses) == self.l:
+                break
+        if seq_len == 8:
+            return np.stack(imgs)[list(range(0, 16, 2))], np.stack(poses)[list(range(0, 16, 2))]
+        return np.stack(imgs), np.stack(poses)
 
-        for c in self.exemplars_classes:
-            class_path = os.path.join(samples_path, c)
-            files = next(os.walk(class_path))[2]
-            files = [os.path.join(class_path, file) for file in files]
-            self.target_set += files
-            self.target_classes += [self.exemplars_classes.index(c) for _ in range(len(files))]
-            self.target_names += [c for _ in range(len(files))]
+    def __getitem__(self, i):  # Must return complete, imp_x and impl_y
 
-        for c in os_classes:
-            class_path = os.path.join(samples_path, c)
-            files = next(os.walk(class_path))[2]
-            files = [os.path.join(class_path, file) for file in files]
-            self.target_set += files
-            self.target_classes += [-1 for _ in range(len(files))]
-            self.target_names += [c for _ in range(len(files))]
+        try:
+            target_set = self.load_sample(self.queries[i])
+        except Exception as e:
+            print(e, i)
+            target_set = self.tapullo
+        if self.tapullo is None:
+            self.tapullo = target_set
+        query_class = self.queries[i].split("\\" if not ubuntu else "/")[-2]
+        known = query_class in self.support_classes
 
-            self.unknowns += files
-            self.unknowns_names += [c for _ in range(len(files))]
-
-    def __getitem__(self, idx):  # Must return complete, imp_x and impl_y
-        with open(self.target_set[idx], 'rb') as file:
-            target_set = pickle.load(file)
-        unknown = []
-        unknown_name = []
-        if len(self.unknowns) > 0:
-            unknown_id = random.choice(list(range(len(self.unknowns))))
-            unknown = self.unknowns[unknown_id]
-            with open(unknown, 'rb') as file:
-                unknown = pickle.load(file)
-            unknown_name = self.unknowns_names[unknown_id]
-        return self.exemplars_poses, target_set, unknown, \
-               np.array(list(range(len(self.exemplars_classes)))), self.target_classes[idx], self.support_names, \
-               self.target_names[idx], unknown_name
+        return {'support_set': {"rgb": np.stack([x[0] for x in self.support_set]),
+                                "sk": np.stack([x[1] for x in self.support_set])},
+                'target_set': {"rgb": target_set[0],
+                               "sk": target_set[1]},
+                'support_classes': np.stack([self.all_test_classes.index(x) for x in self.support_classes]),
+                'target_class': self.all_test_classes.index(query_class),
+                'known': known}
 
     def __len__(self):
-        return len(self.target_set)
+        return len(self.queries)
 
 
 if __name__ == "__main__":

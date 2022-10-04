@@ -82,6 +82,7 @@ class MARIAData(data.Dataset):
         pose_ = pose_ - np.mean(pose_, axis=0)
         if np.any(pose_):  # If those are not zeros
             pose_ = pose_ / np.max(pose_)
+        pose_[:, :2] *= pose_[:, -1:]  # TODO TEST
         pose_ = pose_[:, :2].reshape(-1).astype(float)  # Remove probabilities and flat
         return img, pose, img_, pose_, int(self.annotations[idx][1])
 

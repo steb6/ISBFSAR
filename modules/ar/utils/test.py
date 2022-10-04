@@ -10,9 +10,15 @@ from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
 import numpy as np
 # EPOCH 300
-# {'train/fs_loss': 0.87, 'train/fs_accuracy': 0.53, 'train/os_loss': 0.68, 'train/os_accuracy': 0.6764705882352942, 'train/os_precision': 0.75, 'train/os_recall': 0.52, 'train/os_f1': 0.62, 'train/os_n_1_true': 0.5, 'train/os_n_1_pred': 0.35, 'os_outs': 0.49}
+# {'train/fs_loss': 0.87, 'train/fs_accuracy': 0.53, 'train/os_loss': 0.68, 'train/os_accuracy': 0.67, 'train/os_precision': 0.75, 'train/os_recall': 0.52, 'train/os_f1': 0.62, 'train/os_n_1_true': 0.5, 'train/os_n_1_pred': 0.35, 'os_outs': 0.49}
 # EPOCH 583
-# {'train/fs_loss': 0.55, 'train/fs_accuracy': 0.71, 'train/os_loss': 0.62, 'train/os_accuracy': 0.6904761904761905, 'train/os_precision': 0.66, 'train/os_recall': 0.76, 'train/os_f1': 0.71, 'train/os_n_1_true': 0.5, 'train/os_n_1_pred': 0.57, 'os_outs': 0.45}
+# {'train/fs_loss': 0.55, 'train/fs_accuracy': 0.71, 'train/os_loss': 0.62, 'train/os_accuracy': 0.69, 'train/os_precision': 0.66, 'train/os_recall': 0.76, 'train/os_f1': 0.71, 'train/os_n_1_true': 0.5, 'train/os_n_1_pred': 0.57, 'os_outs': 0.45}
+# EPOCH 967
+# {'train/fs_loss': 0.72, 'train/fs_accuracy': 0.71, 'train/os_loss': 0.44, 'train/os_accuracy': 0.80, 'train/os_precision': 0.80, 'train/os_recall': 0.80, 'train/os_f1': 0.80, 'train/os_n_1_true': 0.5, 'train/os_n_1_pred': 0.5, 'os_outs': 0.49}
+# EPOCH 1212
+# {'train/fs_loss': 0.54, 'train/fs_accuracy': 0.78, 'train/os_loss': 0.50, 'train/os_accuracy': 0.80, 'train/os_precision': 0.76, 'train/os_recall': 0.86, 'train/os_f1': 0.81, 'train/os_n_1_true': 0.5, 'train/os_n_1_pred': 0.56, 'os_outs': 0.53}
+# EPOCH 3000
+# {'train/fs_loss': 0.4730205172672868, 'train/fs_accuracy': 0.875, 'train/os_loss': 1.0021080905642066, 'train/os_accuracy': 0.6851851851851852, 'train/os_precision': 0.6923076923076923, 'train/os_recall': 0.6666666666666666, 'train/os_f1': 0.6792452830188679, 'train/os_n_1_true': 0.5, 'train/os_n_1_pred': 0.4814815, 'os_outs': 0.4980449479859061}
 
 
 device = TRXConfig().device
@@ -37,7 +43,7 @@ if __name__ == "__main__":
 
     # Get model
     model = TRXOS(args).to(device)
-    state_dict = torch.load("modules/ar/modules/raws/hybrid/l8_res50_e729.pth")["model_state_dict"]
+    state_dict = torch.load("modules/ar/modules/raws/hybrid/l8_res50_e3000.pth")["model_state_dict"]
     state_dict = {key.replace(".module", ""): state_dict[key] for key in state_dict.keys()}
     model.load_state_dict(state_dict)
     model.eval()
@@ -51,7 +57,7 @@ if __name__ == "__main__":
                                                shuffle=True)
 
     # Log
-    print("Train samples: {}".format(len(train_loader)))
+    print("Testing time :DDDD have you trained out enough?: {}".format(len(train_loader)))
     print("Training for {} epochs".format(args.n_epochs))
     print("Batch size is {}".format(args.batch_size))
 

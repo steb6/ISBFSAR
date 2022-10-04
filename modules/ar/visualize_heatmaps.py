@@ -7,6 +7,7 @@ from itertools import combinations
 import cv2
 import random
 
+device = TRXConfig().device
 
 # REPRODUCIBILITY
 torch.manual_seed(0)
@@ -34,7 +35,7 @@ if __name__ == "__main__":
     # LOAD MODEL
     model = TRXOS(args, add_hook=True).to(args.device)
     # TODO START RENAME
-    params = torch.load('modules/ar/modules/raws/rgb/6556.pth')['model_state_dict']
+    params = torch.load('modules/ar/modules/raws/hybrid/l8_res50_e1212.pth')['model_state_dict']
     aux = {}
     for param in params:
         data = params[param]
@@ -58,25 +59,14 @@ if __name__ == "__main__":
 
     # PREPARE SAMPLE
     for elem in train_loader:
-        support_set = elem['support_set'].float().to(args.device)
-        # TODO REMOVE DEBUG
-        # support_set[:, 0, ...] = 0
-        # support_set[:, 1, ...] = 0
-        # support_set[:, 2, ...] = 0
-        # support_set[:, 4, ...] = 0
-        # TODO END REMOVE DEBUG
-        target_set = elem['target_set'].float().to(args.device)
-        unknown_set = elem['unknown_set'].float().to(args.device)
-        # support_set.requires_grad = True
-        # target_set.requires_grad = True
-        batch_size = support_set.size(0)
-        support_set = torch.permute(support_set, (0, 1, 2, 5, 3, 4))
-        target_set = torch.permute(target_set, (0, 1, 4, 2, 3))
-        unknown_set = torch.permute(unknown_set, (0, 1, 4, 2, 3))
-        support_labels = torch.arange(args.way).repeat(batch_size).reshape(batch_size, args.way).to(args.device).int()
-        target = np.array(elem['support_classes']).T == \
-                 np.repeat(np.array(elem['target_class']), 5).reshape(batch_size, args.way)
-        target = torch.FloatTensor(target).to(args.device)
+
+        # Extract from dict, convert, move to GPU
+        support_set = [elem['support_set'][t].float().to(device) for t in elem['support_set'].keys()]
+        target_set = [elem['target_set'][t].float().to(device) for t in elem['target_set'].keys()]
+        unknown_set = [elem['unknown_set'][t].float().to(device) for t in elem['unknown_set'].keys()]
+
+        support_labels = torch.arange(args.way).repeat(1).reshape(1, args.way).to(device).int()
+        target = (elem['support_classes'] == elem['target_class'][..., None]).float().to(device)
 
         # INFERENCE
         gradients_trg = None
@@ -85,9 +75,9 @@ if __name__ == "__main__":
         activations_ss = None
         heatmap_ss = None
         heatmap_trg = None
-        model.features_extractor.gradients = []
-        model.features_extractor.activations = []
         model.zero_grad()
+        model.features_extractor["rgb"].activations = []
+        model.features_extractor["rgb"].gradients = []
         out = model(support_set, support_labels, target_set)
         fs_pred = out['logits']
         if torch.argmax(fs_pred) == torch.argmax(target):
@@ -104,23 +94,23 @@ if __name__ == "__main__":
         # (fs_pred[:, true_index]).backward()
         # known_fs_loss = fs_loss_fn(fs_pred[:, true_index][None], target[:, true_index][None])  # JUST TRUE
         target.requires_grad = True
-        one_hot = torch.sum(target * fs_pred)
+        # one_hot = torch.sum(target * fs_pred)
         # known_fs_loss = fs_loss_fn(fs_pred, target)  # WHOLE
         # known_fs_loss = test_loss_fn(fs_pred[:, true_index], torch.FloatTensor([0]).cuda())  # WHOLE
         model.zero_grad()
-        one_hot.backward()
+        fs_pred[:, true_index].backward()
 
         # GET GRADIENTS, SCORES AND ACTIVATIONS
-        gradients_trg, gradients_ss = model.features_extractor.get_activations_gradient()
-        activations_ss, activations_trg = model.features_extractor.activations
+        gradients_trg, gradients_ss = model.features_extractor["rgb"].get_activations_gradient()
+        activations_ss, activations_trg = model.features_extractor["rgb"].activations
 
         # TRANSFORM DATA INTO IMAGES
-        support_set = (support_set.permute(0, 1, 2, 4, 5, 3) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
+        support_set = (support_set[0].permute(0, 1, 2, 4, 5, 3) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
         support_set = support_set.detach().cpu().numpy()
         support_set = (support_set * 255).astype(int)
         support_set = support_set[0].swapaxes(0, 1).reshape(8, 224*5, 224, 3).swapaxes(0, 1).reshape(5*224, 8*224, 3)
 
-        target_set = (target_set.permute(0, 1, 3, 4, 2) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
+        target_set = (target_set[0].permute(0, 1, 3, 4, 2) - torch.FloatTensor([0.485, 0.456, 0.406]).cuda()) / torch.FloatTensor([0.229, 0.224, 0.225]).cuda()
         target_set = target_set.detach().cpu().numpy()
         target_set = (target_set * 255).astype(int)
         target_set = target_set[0].swapaxes(0, 1).reshape(224, -1, 3)
@@ -160,10 +150,10 @@ if __name__ == "__main__":
         # heatmap_ss = torch.stack(best_ss).cpu().numpy()
         # heatmap_trg = torch.stack(best_trg).cpu().numpy()
 
-        # TODO WEIGHTED SUM
+        # TODO best is + and -
         for i in range(gradients_ss.shape[1]):
             activations_ss[:, i, :, :] *= gradients_ss[:, i][..., None, None]
-            activations_trg[:, i, :, :] *= -gradients_trg[:, i][..., None, None]
+            activations_trg[:, i, :, :] *= gradients_trg[:, i][..., None, None]
 
             # activations_ss[:, i, :, :] *= activations_ss[:, i, :, :].mean(dim=(1, 2))[..., None, None]
             # activations_trg[:, i, :, :] *= activations_trg[:, i, :, :].mean(dim=(1, 2))[..., None, None]

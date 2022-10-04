@@ -2,7 +2,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pickle
 
-with open("xpaper2/RESULTS100", "rb") as f:
+with open("RESULTS100", "rb") as f:
     results = pickle.load(f)
 
 metric = "FSOS-ACC"  # OS-ACC FSOS-ACC OS-F1
