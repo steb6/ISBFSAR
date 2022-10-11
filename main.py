@@ -96,36 +96,38 @@ class ISBFSAR:
         self.focus_in.put(img)
         self.hpe_in.put(img)
 
-        # SKELETON CASE
-        hpe_res = self.hpe_out.get()
-        if self.input_type == "hybrid" or self.input_type == "skeleton":
-            if hpe_res is not None:
-                pose, edges, bbox = hpe_res['pose'], hpe_res['edges'], hpe_res['bbox']
-                if pose is not None:
-                    pose = pose - pose[0, :]
-                    elements["pose"] = pose
-                    ar_input.append(pose)
-                elements["edges"] = edges
-                if bbox is not None:
-                    elements["bbox"] = bbox
-                if pose is not None:
-                    elements["distance"] = np.sqrt(np.sum(np.square(np.array([0, 0, 0]) - np.array(pose[0])))) * 2
-
         # RGB CASE
+        hpe_res = self.hpe_out.get()
         if self.input_type == "hybrid" or self.input_type == "rgb":
             if hpe_res is not None:
-                x1, y1, x2, y2 = hpe_res['bbox']
+                x1, x2, y1, y2 = hpe_res['bbox']
                 elements["bbox"] = x1, x2, y1, y2
                 xm = int((x1 + x2) / 2)
                 ym = int((y1 + y2) / 2)
                 l = max(xm - x1, ym - y1)
                 img_ = img[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
                 img_ = cv2.resize(img_, (224, 224))
+                # cv2.imshow("", img_)  # TODO REMOVE DEBUG
+                # cv2.waitKey(1)  # TODO REMOVE DEBUG
                 img_ = img_ / 255.
                 img_ = img_ * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
                 img_ = img_.swapaxes(-1, -3).swapaxes(-1, -2)
                 ar_input.append(img_)
                 elements["img_preprocessed"] = img_
+
+        # SKELETON CASE
+        if self.input_type == "hybrid" or self.input_type == "skeleton":
+            if hpe_res is not None:
+                pose, edges, bbox = hpe_res['pose'], hpe_res['edges'], hpe_res['bbox']
+                if pose is not None:
+                    pose = pose - pose[0, :]
+                    elements["pose"] = pose
+                    ar_input.append(pose.reshape(-1))
+                elements["edges"] = edges
+                if bbox is not None:
+                    elements["bbox"] = bbox
+                if pose is not None:
+                    elements["distance"] = np.sqrt(np.sum(np.square(np.array([0, 0, 0]) - np.array(pose[0])))) * 2
 
         # Make inference
         results = self.ar.inference(ar_input)
@@ -248,20 +250,25 @@ class ISBFSAR:
 
         self.log("GO!")
         playsound('assets' + os.sep + 'start.wav')
-        data = []
+        data = [[] for _ in range(self.window_size)]
         i = 0
-        off_time = self.acquisition_time / self.window_size
-        while len(data) < self.window_size:
+        off_time = (self.acquisition_time / self.window_size)
+        while i < self.window_size:
+            self.log("{:.2f}%".format((i / (self.window_size - 1)) * 100))
             start = time.time()
             res = self.get_frame()
-            if self.input_type in ["skeleton", "hybrid"]:
-                if "pose" in res.keys() and res["pose"] is not None:
-                    data.append((res["pose"],))
-            else:
-                data.append((res["img_preprocessed"],))
-            self.log("{:.2f}%".format((i / (self.window_size - 1)) * 100))
-            i += 1
-            while (time.time() - start)*1000 < off_time:
+            # Check if the sample is good w.r.t. input type
+            good = self.input_type in ["skeleton", "hybrid"] and "pose" in res.keys() and res["pose"] is not None
+            good = good or self.input_type == "rgb"
+            if good:
+                if self.input_type in ["skeleton", "hybrid"]:
+                    data[i].append(res["pose"].reshape(-1))  # CAREFUL with the reshape
+                if self.input_type in ["rgb", "hybrid"]:
+                    data[i].append(res["img_preprocessed"])
+                i += 1
+            # print("BEFORE" , (time.time() - start), off_time)
+            while (time.time() - start) < off_time:
+                # print("INSIDE", (time.time() - start), off_time)
                 continue
 
         playsound('assets' + os.sep + 'stop.wav')
@@ -303,9 +310,15 @@ class ISBFSAR:
         #     data = data[list(range(0, len(data), int(len(data) / self.window_size)))]
         self.log("Success!")
         inp = {"flag": flag,
-               "data": {"imgs": np.stack([x[0] for x in data])}}
-        if self.input_type in ["skeleton", "hybrid"]:
+               "data": {}}
+
+        if self.input_type == "rgb":  # Unique case with images in first position
+            inp["data"]["imgs"] = np.stack([x[0] for x in data])
+        if self.input_type == "skeleton":
             inp["data"]["poses"] = np.stack([x[0] for x in data])
+        if self.input_type == "hybrid":
+            inp["data"]["poses"] = np.stack([x[0] for x in data])
+            inp["data"]["imgs"] = np.stack([x[1] for x in data])
         self.ar.train(inp)
 
     def save(self):

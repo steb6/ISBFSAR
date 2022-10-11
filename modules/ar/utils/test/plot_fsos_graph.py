@@ -2,9 +2,23 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pickle
 
-with open("RESULTS100", "rb") as f:
+# {'2500': {'FSOS-ACC': '0.67±0.06', 'FS-ACC': '0.84±0.08', 'OS-ACC': '0.70±0.07'}}
+# {'3000': {'FSOS-ACC': '0.64±0.07', 'FS-ACC': '0.80±0.10', 'OS-ACC': '0.68±0.05'}}
+
+with open("RESULTS_VALIDATION", "rb") as f:
+# with open("RESULTS_3000_10_REP", "rb") as f:
     results = pickle.load(f)
 
+for checkpoint in results.keys():
+    for metric in results[checkpoint].keys():
+        if metric == "OS-F1":
+            continue
+        std = round(np.std(results[checkpoint][metric][0]), 2)
+        results[checkpoint][metric] = round(sum(results[checkpoint][metric][0]) / len(results[checkpoint][metric][0]), 2)
+        results[checkpoint][metric] = str(results[checkpoint][metric]) + "±" + str(std)
+
+print(results)
+exit()
 metric = "FSOS-ACC"  # OS-ACC FSOS-ACC OS-F1
 
 # Data

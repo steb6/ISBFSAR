@@ -13,8 +13,10 @@ class ActionRecognizer:
         self.device = args.device
 
         self.ar = TRXOS(TRXConfig(), add_hook=add_hook)
-        self.ar.load_state_dict(torch.load(args.final_ckpt_path,
-                                           map_location=torch.device(0))['model_state_dict'])
+        # Fix dataparallel
+        state_dict = torch.load(args.final_ckpt_path, map_location=torch.device(0))['model_state_dict']
+        state_dict = {param.replace('.module', ''): data for param, data in state_dict.items()}
+        self.ar.load_state_dict(state_dict)
         self.ar.cuda()
         self.ar.eval()
 
@@ -45,20 +47,18 @@ class ActionRecognizer:
             self.previous_frames = self.previous_frames[1:]  # add as last frame
 
         # Predict actual action
-        data = [torch.stack([i[j] for i in self.previous_frames]) for j in range(len(self.previous_frames[0]))]
+        data = [torch.stack([i[j] for i in self.previous_frames]).unsqueeze(0) for j in range(len(self.previous_frames[0]))]
         labels = torch.IntTensor(list(range(self.way))).unsqueeze(0).cuda()
         ss = []  # TODO INFERENCE SHOULD NOT COMPUTE PROTOTYPES EVERY TIME
-        if self.input_type in ["skeleton", "hybrid"]:
-            ss.append(torch.stack([self.support_set[c]["poses"] for c in self.support_set.keys()]))
-            ss = [x.reshape(*x.shape[:-2], -1).unsqueeze(0) for x in ss]
-            data[0] = data[0].reshape(*data[0].shape[:-2], -1).unsqueeze(0)  # Add batch dimension, data is a list
         if self.input_type in ["rgb", "hybrid"]:
             ss.append(torch.stack([self.support_set[c]["imgs"] for c in self.support_set.keys()]).unsqueeze(0))
-            data[0] = data[0].unsqueeze(0)
-        pad = torch.zeros_like(ss[0])
-        while ss[0].shape[1] < 5:
-            ss[0] = torch.concat((ss[0], pad), dim=1)
-        outputs = self.ar(ss, labels, data)
+        if self.input_type in ["skeleton", "hybrid"]:
+            ss.append(torch.stack([self.support_set[c]["poses"] for c in self.support_set.keys()]).unsqueeze(0))
+        for i in range(len(ss)):  # Pad supports
+            pad = torch.zeros_like(ss[i])
+            while ss[i].shape[1] < 5:
+                ss[i] = torch.concat((ss[i], pad), dim=1)
+        outputs = self.ar(ss, labels, data)  # RGB, POSES
 
         # Softmax
         few_shot_result = torch.softmax(outputs['logits'].squeeze(0), dim=0).detach().cpu().numpy()

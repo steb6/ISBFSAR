@@ -5,6 +5,18 @@ from vispy.scene.visuals import Text, Image, ColorBar
 import numpy as np
 import math
 
+from vispy.visuals import RectangleVisual
+
+
+def get_color(value):
+    if 0 <= value < 0.33:
+        return "red"
+    if 0.33 < value < 0.66:
+        return "orange"
+    if 0.66 < value <= 1:
+        return "green"
+    raise Exception("Wrong argument")
+
 
 class VISPYVisualizer:
 
@@ -44,7 +56,7 @@ class VISPYVisualizer:
         self.canvas.show()
         self.canvas.events.key_press.connect(self.printer)
 
-        self.os = False
+        self.os = True
 
         # This is the top-level widget that will hold three ViewBoxes, which will
         # be automatically resized whenever the grid is resized.
@@ -82,10 +94,20 @@ class VISPYVisualizer:
         self.b2.add(self.focus)
         self.fps = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
                         font_size=12, pos=(0.75, 0.9))
-        self.is_same_action = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
-                                   font_size=12, pos=(0.75, 0.7))
-        self.b2.add(self.is_same_action)
         self.b2.add(self.fps)
+        self.fsscore = Text('fs score', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
+                            font_size=12, pos=(0.5, 0.75))
+        self.b2.add(self.fsscore)
+        self.osscore = Text('os score', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
+                            font_size=12, pos=(0.75, 0.75))
+        self.b2.add(self.osscore)
+
+        # self.is_same_action = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
+        #                            font_size=12, pos=(0.75, 0.7))
+        # self.b2.add(self.is_same_action)
+        self.os_score = scene.visuals.Rectangle(center=(2, 2), color="white", border_color="white", height=0.1)
+        self.b2.add(self.os_score)
+
         self.actions = {}
         self.values = {}
 
@@ -151,15 +173,20 @@ class VISPYVisualizer:
                                [0, math.sin(theta), math.cos(theta)]])
                 pose = pose @ R
                 for i, edge in enumerate(edges):
-                    self.lines[i].set_data((pose[[edge[0], edge[1]]]))
+                    self.lines[i].set_data((pose[[edge[0], edge[1]]]),
+                                           color="purple",
+                                           edge_color="white")
+            else:
+                for i in range(len(self.lines)):
+                    self.lines[i].set_data(color="grey",
+                                           edge_color="white")
 
             # IMAGE
-            img = cv2.flip(img, 0)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             if bbox is not None:
                 x1, x2, y1, y2 = bbox
-                img = cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 1)
-            self.image.set_data(img)
+                img = cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 3)
+            self.image.set_data(cv2.flip(img, 0))
 
             # INFO
             if focus:
@@ -171,54 +198,40 @@ class VISPYVisualizer:
             self.fps.text = "FPS: {:.2f}".format(fps)
             self.distance.text = "DIST: {:.2f}m".format(distance) if distance is not None else "DIST:"
 
+            # Actions
             m = max(results.values()) if len(results) > 0 else 0  # Just max
-            for i, r in enumerate(results.keys()):
-                score = results[r]
+            for i, action in enumerate(results.keys()):
+                score = results[action]
                 requires_focus = False
-                # Check if conditions are satisfied
-                if score == m:
-                    # OS SCORE
-                    if self.os:
-                        self.is_same_action.text = "{:.2f}".format(float(is_true))
-                        self.is_same_action.color = 'red' if float(is_true) < 0.75 else 'green'
-                        self.is_same_action.pos = 0.75, 0.7 - (0.1 * i)
-                    else:
-                        self.is_same_action.text = ""
-                    c1 = True if not requires_focus else focus
-                    c2 = float(is_true) >= 0.75
-                    if self.os:
-                        if c1 and c2:
-                            color = "green"
-                        else:
-                            color = "orange"
-                    else:
-                        if c1:
-                            color = "green"
-                        else:
-                            color = "orange"
-                else:
-                    color = "red"
-                if r in self.actions.keys():
-                    text = r  # {:.2f}".format(r, score)
+                # Actions
+                if action in self.actions.keys():
+                    text = action  # {:.2f}".format(r, score)
                     if requires_focus:
                         text += ' (0_0)'
-                    self.actions[r].text = text
+                    self.actions[action].text = text
+                    self.values[action].width = score * 0.33
+                    self.actions[action].pos = (1 / 6, 0.6 - (0.1 * i))
+                    self.values[action].center = (2 / 6 + ((score * 0.33) / 2), 0.6 - (0.1 * i))
+                    self.values[action].color = get_color(score)
+                    self.values[action].border_color = get_color(score)
                 else:
-                    self.actions[r] = Text('', rotation=0, anchor_x="center", anchor_y="bottom", font_size=12)
-                    self.values[r] = ColorBar(Colormap(['r', 'g']), "top", (0.5, 0.05), clim=("", ""))
-                    self.b2.add(self.actions[r])
-                    self.b2.add(self.values[r])
-
-                bar_height = 0.075
-                self.values[r].label = "{}%".format(int(score*100))
-                score = score * 0.9  # To avoid to reach the right limit
-                if score == m and self.os:  # TODO TEST
-                    score = score * float(is_true)  # TODO TEST
-                self.values[r].pos = 0.5 + (score/4 if score/2 > bar_height else bar_height/2), \
-                                     0.7 - (0.1 * i) - bar_height/2
-                self.values[r].size = (score/2 if score/2 > bar_height else bar_height, bar_height)
-                self.actions[r].pos = 0.25, 0.7 - (0.1 * i)
-                self.actions[r].color = color
+                    self.actions[action] = Text('', rotation=0, anchor_x="center", anchor_y="center", font_size=12,
+                                                pos=(1 / 6, 0.6 - (0.1 * i)), color="white")
+                    self.b2.add(self.actions[action])
+                    self.values[action] = scene.visuals.Rectangle(
+                        center=(3 / 6 + ((score * 0.33) / 2), 0.6 - (0.1 * i)),
+                        color=get_color(score), border_color=get_color(score), height=0.1,
+                        width=score * 0.33)
+                    self.b2.add(self.values[action])
+                # Os score
+                self.actions[action].color = "white"
+                if score == m:
+                    self.os_score.width = is_true * 0.33
+                    self.os_score.center = [(4 / 6) + ((is_true * 0.33) / 2), 0.6 - (0.1 * i)]
+                    self.os_score.color = get_color(is_true)
+                    self.os_score.border_color = get_color(is_true)
+                    if is_true > 0.66:
+                        self.actions[action].color = "green"
 
             # Remove erased action (if any)
             to_remove = []

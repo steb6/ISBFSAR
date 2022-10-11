@@ -1,3 +1,4 @@
+import copy
 import os
 import pickle
 import torch.utils.data as data
@@ -78,17 +79,25 @@ class EpisodicLoader(data.Dataset):
 
 
 class FSOSEpisodicLoader(data.Dataset):
-    def __init__(self, queries_path, exemplars_path, support_classes, l=16, input_type="hybrid"):
+    """
+    Loader used to compute FSOS score and similarity matrix.
+    For FSOS, pass query path, exemplars path and a list of classes s.t. their exemplars are added inside ss.
+    To compute similarity matrix for discriminator, just put one element in support classes and pass query class
+    """
+    def __init__(self, queries_path, exemplars_path, support_classes, l=16, input_type="hybrid", query_class=None):
         self.queries_path = queries_path
         self.exemplars_path = exemplars_path
         self.all_test_classes = next(os.walk(self.exemplars_path))[1]
         self.support_classes = [next(os.walk(self.exemplars_path))[1][i] for i in support_classes]
-        self.l = l
+
         self.input_type = input_type
         self.queries = []
-        for query_class in self.all_test_classes:
-            for class_dir in next(os.walk(os.path.join(queries_path, query_class)))[1]:
-                self.queries.append(os.path.join(queries_path, query_class, class_dir))
+        for q in self.all_test_classes:
+            if query_class:
+                if q != query_class:
+                    continue
+            for class_dir in next(os.walk(os.path.join(queries_path, q)))[1]:
+                self.queries.append(os.path.join(queries_path, q, class_dir))
         self.support_set = [self.load_sample(os.path.join(self.exemplars_path, cl, "0")) for cl in self.support_classes]
         self.tapullo = None
 
@@ -126,13 +135,14 @@ class FSOSEpisodicLoader(data.Dataset):
         query_class = self.queries[i].split("\\" if not ubuntu else "/")[-2]
         known = query_class in self.support_classes
 
-        return {'support_set': {"rgb": np.stack([x[0] for x in self.support_set]),
-                                "sk": np.stack([x[1] for x in self.support_set])},
-                'target_set': {"rgb": target_set[0],
-                               "sk": target_set[1]},
-                'support_classes': np.stack([self.all_test_classes.index(x) for x in self.support_classes]),
-                'target_class': self.all_test_classes.index(query_class),
-                'known': known}
+        c = copy.deepcopy
+        return {'support_set': {"rgb": c(np.stack([x[0] for x in self.support_set])),
+                                "sk": c(np.stack([x[1] for x in self.support_set]))},
+                'target_set': {"rgb": c(target_set[0]),
+                               "sk": c(target_set[1])},
+                'support_classes': c(np.stack([self.all_test_classes.index(x) for x in self.support_classes])),
+                'target_class': c(self.all_test_classes.index(query_class)),
+                'known': c(known)}
 
     def __len__(self):
         return len(self.queries)

@@ -80,7 +80,12 @@ class TRXConfig(object):
         self.checkpoints_path = "checkpoints"
 
         # DEPLOYMENT
-        self.final_ckpt_path = "modules/ar/modules/raws/DISC.pth" if self.input_type == "skeleton" else "modules/ar/modules/raws/rgb/3000.pth"
+        if input_type == "rgb":
+            self.final_ckpt_path = "modules/ar/modules/raws/rgb/3000.pth"
+        elif input_type == "skeleton":
+            self.final_ckpt_path = "modules/ar/modules/raws/DISC.pth"
+        elif input_type == "hybrid":
+            self.final_ckpt_path = "modules/ar/modules/raws/hybrid/2500.pth"
         self.trt_path = 'modules/ar/modules/{}/trx.engine'.format(engine_dir)
         self.seq_len = seq_len
 

@@ -10,8 +10,8 @@ import random
 device = TRXConfig().device
 
 # REPRODUCIBILITY
-torch.manual_seed(0)
-random.seed(1)
+# torch.manual_seed(0)
+# random.seed(1)
 
 
 if __name__ == "__main__":
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     # LOAD MODEL
     model = TRXOS(args, add_hook=True).to(args.device)
     # TODO START RENAME
-    params = torch.load('modules/ar/modules/raws/hybrid/l8_res50_e1212.pth')['model_state_dict']
+    params = torch.load('modules/ar/modules/raws/hybrid/2500.pth')['model_state_dict']
     aux = {}
     for param in params:
         data = params[param]
@@ -50,7 +50,7 @@ if __name__ == "__main__":
     # LOAD DATASET
     train_data = EpisodicLoader(args.data_path, k=args.way, n_task=100, input_type=args.input_type, )
     train_data.classes = test_classes
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=1, num_workers=0, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=1, num_workers=0, shuffle=True)
 
     # LOSSES
     os_loss_fn = torch.nn.BCELoss()

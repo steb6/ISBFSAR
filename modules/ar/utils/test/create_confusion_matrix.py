@@ -1,16 +1,19 @@
 import torch
 from tqdm import tqdm
-from modules.ar.utils.dataloader import TestMetrabsData
-from modules.ar.utils.model import Skeleton_TRX_EXP, Skeleton_TRX_Disc
-from utils.matplotlib_visualizer import MPLPosePrinter
+from modules.ar.utils.dataloader import FSOSEpisodicLoader
+from modules.ar.utils.model import TRXOS
 from utils.params import TRXConfig
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
-import random
 import pickle
+import os
+from utils.params import ubuntu
 
+query_path = os.path.join(".." if ubuntu else "D:", "datasets", "NTURGBD_to_YOLO_METRO")
+exemplars_path = os.path.join(".." if ubuntu else "D:", "datasets", "NTURGBD_to_YOLO_METRO_exemplars")
+checkpoints_path = "modules/ar/modules/raws/hybrid/2500.pth" if not ubuntu else "/home/IIT.LOCAL/sberti/ISBFSAR" \
+                                                                                "/checkpoints/28_09_2022-09_17/2500.pth"
+
+b_size = 1 if not ubuntu else 16
+n_workers = 1 if not ubuntu else 8
 device = 0
 results = {}
 
@@ -36,66 +39,66 @@ if __name__ == "__main__":
     args = TRXConfig()
     results = {}
 
-    for model_type in ["DISC"]:  # , "EXP", "DISC-NO-OS"]:
+    # GET MODEL
+    model = TRXOS(args).cuda(device)
+    state_dict = torch.load(checkpoints_path,
+                            map_location=torch.device(0))["model_state_dict"]
+    state_dict = {key.replace(".module", ""): state_dict[key] for key in state_dict.keys()}  # For DataParallel
+    model.load_state_dict(state_dict)
+    model.eval()
+    torch.set_grad_enabled(False)
 
-        # GET MODEL
-        trx_model = None
-        if model_type == "DISC" or model_type == "DISC-NO-OS":
-            trx_model = Skeleton_TRX_Disc
-        elif model_type == "EXP":
-            trx_model = Skeleton_TRX_EXP
-        else:
-            raise Exception("NOT a valid model")
-        model = trx_model(args).cuda(device)
-        model.load_state_dict(
-            torch.load("modules/ar/modules/raws/{}.pth".format(model_type),
-                       map_location=torch.device(0))["model_state_dict"])
-        model.eval()
-        torch.set_grad_enabled(False)
+    # For each test class
+    for i, ss_name in enumerate(tqdm(test_classes)):
+    # for i, ss_name in enumerate(test_classes):
 
-        # For each K
-        for ss_name in test_classes:
+        results[ss_name] = {}
 
-            results[ss_name] = {}
+        for q_name in test_classes:
 
-            for q_name in tqdm(test_classes, desc=f"{test_classes.index(ss_name)}"):
+            # Dataset Iterator
+            test_data = FSOSEpisodicLoader(query_path,
+                                           exemplars_path,
+                                           [i],
+                                           query_class=q_name)
+            test_loader = torch.utils.data.DataLoader(test_data, batch_size=b_size, num_workers=1)
 
-                # Dataset Iterator
-                test_data = TestMetrabsData(args.data_path, "D:\\datasets\\metrabs_trx_skeletons_exemplars",
-                                            [ss_name], [q_name])
-                test_loader = torch.utils.data.DataLoader(test_data, batch_size=32, num_workers=1)
+            os_preds = []
+            targets = []
+            # count = 0
+            # for elem in tqdm(test_loader):
+            for elem in test_loader:
+                # Extract from dict, convert, move to GPU
+                support_set = [elem['support_set'][t].float().to(device) for t in elem['support_set'].keys()]
+                target_set = [elem['target_set'][t].float().to(device) for t in elem['target_set'].keys()]
 
-                os_preds = []
-                targets = []
+                support_labels = torch.arange(1).repeat(b_size).reshape(b_size, 1).to(device).int()
+                target = torch.argmax((elem['support_classes'] == elem['target_class'][..., None]).int(),
+                                      dim=1).float().to(device)
 
-                for elem in test_loader:
-                    support_set, target_set, _, support_labels, target_label, _, _, _ = elem
-                    batch_size = support_set.size(0)
-
-                    support_set = support_set.reshape(batch_size, 1, args.seq_len, args.n_joints * 3).cuda().float()
-                    target_set = target_set.reshape(batch_size, args.seq_len, args.n_joints * 3).cuda().float()
-                    support_labels = support_labels.reshape(batch_size, 1).cuda().int()
-                    target_label = target_label.cuda()
-
-                    ################
-                    # Known action #
-                    ################
+                with torch.no_grad():
                     out = model(support_set, support_labels, target_set)
-                    os_pred = out['is_true']
+                os_pred = out['is_true']
 
-                    os_preds.append(os_pred)
-                    targets.append(target_label)
+                os_preds.append(os_pred.reshape(-1))
+                targets.append(elem["known"].cuda(device).reshape(-1))
 
-                os_preds = torch.concat(os_preds) > 0.5
-                targets = torch.concat(targets)
-                good_indices = (targets == -1).nonzero(as_tuple=True)[0]
-                perc_true = (os_preds[good_indices].float().sum() / torch.numel(os_preds[good_indices])).item()
+                # if count == 10:
+                #     break
+                # count += 1
 
-                results[ss_name][q_name] = perc_true
-                # TODO FILTER WHEN TARGETS IS 1
+            os_preds = torch.concat(os_preds) > 0.5
+            targets = torch.concat(targets)
 
-            print(results)
+            score = target.numel() / (os_preds == targets).sum()
 
-    with open("CONFUSIONMATRIX", "wb") as f:
+            # good_indices = (targets == -1).nonzero(as_tuple=True)[0]
+            # perc_true = (os_preds[good_indices].float().sum() / torch.numel(os_preds[good_indices])).item()
+
+            results[ss_name][q_name] = score
+            # TODO FILTER WHEN TARGETS IS 1
+
+        print(results)
+
+    with open("CONFUSIONMATRIX_2", "wb") as f:
         pickle.dump(results, f)
-
