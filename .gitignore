@@ -38,3 +38,7 @@ imgs
 FSOS-ACC6.png
 RESULTS100
 xpaper2
+.bash_history
+.cache
+.python_history
+sink.py
