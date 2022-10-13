@@ -1,11 +1,8 @@
 import cv2
 from vispy import app, scene, visuals
-from vispy.color import Colormap
-from vispy.scene.visuals import Text, Image, ColorBar
+from vispy.scene.visuals import Text, Image
 import numpy as np
 import math
-
-from vispy.visuals import RectangleVisual
 
 
 def get_color(value):

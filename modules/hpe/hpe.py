@@ -52,6 +52,7 @@ class HumanPoseEstimator:
             self.skeleton_types = pickle.load(input_file)
 
         # Load modules
+        print("Loading YOLO engine...")
         self.yolo = Runner(model_config.yolo_engine_path)
         if not self.just_box:
             self.image_transformation = Runner(model_config.image_transformation_path)

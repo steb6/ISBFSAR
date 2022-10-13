@@ -1,11 +1,12 @@
 import platform
+import os
 
+docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
 input_type = "hybrid"  # rgb, skeleton or hybrid
 seq_len = 8
 
-
 ubuntu = platform.system() == "Linux"
-engine_dir = "engines"
+engine_dir = "engines" if not docker else os.path.join("engines", "docker")
 print("Ubuntu: {}".format(ubuntu))
 
 

@@ -1,4 +1,5 @@
 import pickle as pkl
+from multiprocessing.managers import BaseManager
 from modules.focus.gaze_estimation.focus import FocusDetector
 # from modules.focus.mutual_gaze.focus import FocusDetector
 import os
@@ -7,11 +8,9 @@ import time
 from modules.ar.ar import ActionRecognizer
 import cv2
 from playsound import playsound
-from utils.input import RealSense
 from modules.hpe.hpe import HumanPoseEstimator
 from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig, FocusConfig
 from utils.params import TRXConfig
-from utils.output import VISPYVisualizer
 from multiprocessing import Process, Queue
 
 
@@ -36,24 +35,14 @@ class ISBFSAR:
 
         self.ar = ActionRecognizer(TRXConfig(), add_hook=False)
 
-        # Connect to webcam
-        if video_input is None:
-            if args.cam == "webcam":
-                self.cap = cv2.VideoCapture(0)
-                self.cap.set(3, args.cam_width)
-                self.cap.set(4, args.cam_height)
-            elif args.cam == "realsense":
-                self.cap = RealSense(width=args.cam_width, height=args.cam_height, fps=30)
-                # intrinsics = self.cap.intrinsics()
-                # i = np.eye(3)
-                # i[0][0] = intrinsics.fx
-                # i[0][2] = intrinsics.ppx
-                # i[1][1] = intrinsics.fy
-                # i[1][2] = intrinsics.ppy
-                # self.hpe.intrinsics = i
-        else:
-            self.cap = cv2.VideoCapture(video_input)
+        # Create communication with host
+        BaseManager.register('get_queue')
+        manager = BaseManager(address=("host.docker.internal", 50000), authkey=b'abracadabra')
+        manager.connect()
+        self._in_queue = manager.get_queue('src_to_sink')  # To get rgb or msg
+        self._out_queue = manager.get_queue('sink_to_src')  # To send element to VISPY
 
+        # Variables
         self.cam_width = args.cam_width
         self.cam_height = args.cam_height
         self.window_size = args.window_size
@@ -61,17 +50,6 @@ class ISBFSAR:
         self.last_poses = []
         self.skeleton_scale = args.skeleton_scale
         self.acquisition_time = args.acquisition_time
-
-        # Create input
-        self.input_queue = Queue(1)
-
-        # Create output
-        self.visualizer = visualizer
-        if self.visualizer:
-            self.output_queue = Queue(1)
-            self.output_proc = Process(target=VISPYVisualizer.create_visualizer,
-                                       args=(self.output_queue, self.input_queue))
-            self.output_proc.start()
 
     def get_frame(self, img=None):
         """
@@ -83,10 +61,8 @@ class ISBFSAR:
 
         # If img is not given (not a video), try to get img
         if img is None:
-            ret, img = self.cap.read()
-            if not ret:
-                raise Exception("Cannot grab frame!")
-            elements["img"] = img
+            img = self._in_queue.get()["rgb"]
+        elements["img"] = img
 
         # Start independent modules
         self.focus_in.put(img)
@@ -146,8 +122,7 @@ class ISBFSAR:
         fps = sum(fps_s) / len(fps_s)
         elements["fps"] = fps
 
-        if self.visualizer:
-            self.output_queue.put((elements,))
+        self._out_queue.put((elements,))
 
         return elements
 
@@ -157,14 +132,21 @@ class ISBFSAR:
 
     def run(self):
         while True:
-            # We received a command
-            if not self.input_queue.empty():
-                msg = self.input_queue.get()
-            else:
-                # We didn't receive a command, just do inference
-                _ = self.get_frame()
+            # # We received a command
+            # if not self.input_queue.empty():
+            #     msg = self.input_queue.get()
+            # else:
+            #     # We didn't receive a command, just do inference
+            #     _ = self.get_frame()
+            #     continue
+
+            # Data is a dict that contains or a "msg" or a "rgb"
+            data = self._in_queue.get()
+            if "msg" not in data.keys():
+                _ = self.get_frame(data["rgb"])
                 continue
 
+            msg = data["msg"]
             msg = msg.strip()
             msg = msg.split()
 

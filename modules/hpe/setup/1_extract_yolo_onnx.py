@@ -2,11 +2,13 @@ import torch
 import sys
 import os
 try:
-    sys.path.append("modules/hpe/assets/pytorchYOLOv4")
+    sys.path.append(os.path.join("modules", "hpe", "assets", "pytorchYOLOv4"))
     from modules.hpe.assets.pytorchYOLOv4.models import Yolov4
 except ImportError as e:
+    print(e)
     print("Clone https://github.com/Tianxiaomo/pytorch-YOLOv4 inside modules/hpe/assets first!")
     print("Then remove the '-' character from Pytorch-YOLOv4")
+    print("Launch from main directory")
     exit(-1)
 
 if not os.path.exists('modules/hpe/modules/raws/yolov4.pth'):
