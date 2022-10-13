@@ -209,7 +209,7 @@ class PostResNet(nn.Module):
     def __init__(self):
         super().__init__()
         self.act1 = torch.nn.ReLU()
-        self.l1 = torch.nn.Linear(1000, 256)
+        self.l1 = torch.nn.Linear(2048, 256)
 
     def forward(self, x):
         x = self.act1(x)
@@ -270,9 +270,11 @@ class TRXOS(nn.Module):
             self.features_extractor['sk'] = MLP(args.n_joints * 3, args.n_joints * 3 * 2, 256)
         if args.input_type in ["rgb", "hybrid"]:
             if add_hook:
-                self.features_extractor["rgb"] = self.myresnet50(pretrained=True)
+                resnet = self.myresnet50(pretrained=True)
+                self.features_extractor["rgb"] = nn.Sequential(*list(resnet.children())[:-1])
             else:
-                self.features_extractor["rgb"] = resnet50(pretrained=True)
+                resnet = resnet50(pretrained=True)
+                self.features_extractor["rgb"] = nn.Sequential(*list(resnet.children())[:-1])
 
         self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s, add_hook=add_hook) for s in args.temp_set])
 

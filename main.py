@@ -15,9 +15,6 @@ from utils.output import VISPYVisualizer
 from multiprocessing import Process, Queue
 
 
-# TODO ar should not compute prototypes every time
-
-
 class ISBFSAR:
     def __init__(self, args, visualizer=True, video_input=None):
         self.input_type = args.input_type
@@ -46,7 +43,7 @@ class ISBFSAR:
                 self.cap.set(3, args.cam_width)
                 self.cap.set(4, args.cam_height)
             elif args.cam == "realsense":
-                self.cap = RealSense(width=args.cam_width, height=args.cam_height, fps=60)
+                self.cap = RealSense(width=args.cam_width, height=args.cam_height, fps=30)
                 # intrinsics = self.cap.intrinsics()
                 # i = np.eye(3)
                 # i[0][0] = intrinsics.fx
@@ -265,9 +262,7 @@ class ISBFSAR:
                 if self.input_type in ["rgb", "hybrid"]:
                     data[i].append(res["img_preprocessed"])
                 i += 1
-            # print("BEFORE" , (time.time() - start), off_time)
-            while (time.time() - start) < off_time:
-                # print("INSIDE", (time.time() - start), off_time)
+            while (time.time() - start) < off_time:  # Busy wait
                 continue
 
         playsound('assets' + os.sep + 'stop.wav')
@@ -313,10 +308,9 @@ class ISBFSAR:
 
         if self.input_type == "rgb":  # Unique case with images in first position
             inp["data"]["imgs"] = np.stack([x[0] for x in data])
-        if self.input_type == "skeleton":
+        if self.input_type in ["skeleton", "hybrid"]:
             inp["data"]["poses"] = np.stack([x[0] for x in data])
         if self.input_type == "hybrid":
-            inp["data"]["poses"] = np.stack([x[0] for x in data])
             inp["data"]["imgs"] = np.stack([x[1] for x in data])
         self.ar.train(inp)
 
@@ -344,6 +338,4 @@ def run_module(module, configurations, input_queue, output_queue):
 
 if __name__ == "__main__":
     master = ISBFSAR(MainConfig(), visualizer=True)
-    # master = ISBFSAR(h, n, f, MainConfig(), visualizer=True, video_input="assets/test_gaze_no_mask.mp4")
-
     master.run()
