@@ -262,6 +262,7 @@ class TRXOS(nn.Module):
     def __init__(self, args, add_hook=False):
         super(TRXOS, self).__init__()
         self.args = args
+        self.way = args.way
 
         self.trans_linear_in_dim = args.trans_linear_in_dim
         self.features_extractor = nn.ModuleDict()
@@ -285,20 +286,27 @@ class TRXOS(nn.Module):
 
         self.post_resnet = PostResNet()
 
-    def forward(self, context_images, context_labels, target_images):
-        b, k, l, c, h, w = context_images[0].size()
-        context_features_rgb = self.features_extractor['rgb'](context_images[0].reshape(-1, c, h, w)).reshape(b, k, l, -1)
+    def forward(self, context_images, context_labels, target_images, ss_features=None):
+        b, l, c, h, w = target_images[0].size()
+        k = self.way
+
+        # Query
         target_features_rgb = self.features_extractor['rgb'](target_images[0].reshape(-1, c, h, w)).reshape(b, l, -1)
-        context_features_sk = self.features_extractor['sk'](context_images[1])
-        target_features_sk = self.features_extractor['sk'](target_images[1])
-
-        # Post ResNet
-        context_features_rgb = self.post_resnet(context_features_rgb)
         target_features_rgb = self.post_resnet(target_features_rgb)
-
-        context_features = torch.concat((context_features_rgb, context_features_sk), dim=-1)
+        target_features_sk = self.features_extractor['sk'](target_images[1])
         target_features = torch.concat((target_features_rgb, target_features_sk), dim=-1)
         target_features = target_features.unsqueeze(1)
+
+        # Support set
+        if ss_features is None:
+            context_features_rgb = self.features_extractor['rgb'](context_images[0].reshape(-1, c, h, w)).reshape(b, k, l, -1)
+            context_features_rgb = self.post_resnet(context_features_rgb)
+            context_features_sk = self.features_extractor['sk'](context_images[1])
+            context_features = torch.concat((context_features_rgb, context_features_sk), dim=-1)
+        else:
+            context_features = ss_features
+
+        # Post ResNet
         out = self.transformers[0](context_features, context_labels, target_features)
         all_logits = out['logits']
 
@@ -306,7 +314,8 @@ class TRXOS(nn.Module):
         feature = out['diffs'][torch.arange(b), chosen_index, ...]
         decision = self.discriminator(feature)
 
-        return {'logits': all_logits, 'is_true': decision, 'prototypes': out['prototypes']}
+        return {'logits': all_logits, 'is_true': decision, 'prototypes': out['prototypes'],
+                'support_features': context_features}
 
     def distribute_model(self):
         """

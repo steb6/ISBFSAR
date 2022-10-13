@@ -16,7 +16,6 @@ from multiprocessing import Process, Queue
 
 
 # TODO ar should not compute prototypes every time
-# TODO visualize heatmap activation when debugging support set
 
 
 class ISBFSAR:

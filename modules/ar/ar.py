@@ -49,16 +49,33 @@ class ActionRecognizer:
         # Predict actual action
         data = [torch.stack([i[j] for i in self.previous_frames]).unsqueeze(0) for j in range(len(self.previous_frames[0]))]
         labels = torch.IntTensor(list(range(self.way))).unsqueeze(0).cuda()
-        ss = []  # TODO INFERENCE SHOULD NOT COMPUTE PROTOTYPES EVERY TIME
-        if self.input_type in ["rgb", "hybrid"]:
-            ss.append(torch.stack([self.support_set[c]["imgs"] for c in self.support_set.keys()]).unsqueeze(0))
-        if self.input_type in ["skeleton", "hybrid"]:
-            ss.append(torch.stack([self.support_set[c]["poses"] for c in self.support_set.keys()]).unsqueeze(0))
-        for i in range(len(ss)):  # Pad supports
-            pad = torch.zeros_like(ss[i])
-            while ss[i].shape[1] < 5:
-                ss[i] = torch.concat((ss[i], pad), dim=1)
-        outputs = self.ar(ss, labels, data)  # RGB, POSES
+
+        # Get SS
+        ss = None
+        ss_f = None
+        if all('features' in self.support_set[c].keys() for c in self.support_set.keys()):
+            ss_f = torch.stack([self.support_set[c]["features"] for c in self.support_set.keys()])  # 3 16 90
+            pad = torch.zeros_like(ss_f[0]).unsqueeze(0)
+            while ss_f.shape[0] < 5:
+                ss_f = torch.concat((ss_f, pad), dim=0)
+            ss_f = ss_f.unsqueeze(0)  # Add batch dimension
+        else:
+            ss = []  # TODO INFERENCE SHOULD NOT COMPUTE PROTOTYPES EVERY TIME
+            if self.input_type in ["rgb", "hybrid"]:
+                ss.append(torch.stack([self.support_set[c]["imgs"] for c in self.support_set.keys()]).unsqueeze(0))
+            if self.input_type in ["skeleton", "hybrid"]:
+                ss.append(torch.stack([self.support_set[c]["poses"] for c in self.support_set.keys()]).unsqueeze(0))
+            for i in range(len(ss)):  # Pad supports
+                pad = torch.zeros_like(ss[i][:, 0].unsqueeze(1))
+                while ss[i].shape[1] < 5:
+                    ss[i] = torch.concat((ss[i], pad), dim=1)
+        with torch.no_grad():
+            outputs = self.ar(ss, labels, data, ss_features=ss_f)  # RGB, POSES
+
+        # Save support features
+        if ss_f is None:
+            for i, s in enumerate(self.support_set.keys()):
+                self.support_set[s]['features'] = outputs['support_features'][0][i]  # zero to remove batch dimension
 
         # Softmax
         few_shot_result = torch.softmax(outputs['logits'].squeeze(0), dim=0).detach().cpu().numpy()

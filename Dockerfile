@@ -11,7 +11,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install ffmpeg libsm6 libxext6 -y
 RUN pip install opencv-python
 
 # Install all the rest
-RUN pip install einops tqdm playsound pyrealsense2 vispy omegaconf scipy mediapipe timm
+#RUN pip install einops tqdm playsound pyrealsense2 vispy omegaconf scipy mediapipe timm
 
 # Move files
 ENV PYTHONPATH=$PWD

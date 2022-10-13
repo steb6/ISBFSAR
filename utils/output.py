@@ -127,15 +127,27 @@ class VISPYVisualizer:
         self.desc_add = Text('ADD ACTION: add action_name [-focus]', color='white', rotation=0,
                              anchor_x="left",
                              anchor_y="bottom",
-                             font_size=12, pos=(0.1, 0.9))
+                             font_size=10, pos=(0.1, 0.9))
+        self.desc_save = Text('SAVE: save', color='white', rotation=0, anchor_x="left",
+                              anchor_y="bottom",
+                              font_size=10, pos=(0.1, 0.8))
+        self.desc_load = Text('LOAD: load', color='white', rotation=0, anchor_x="left",
+                              anchor_y="bottom",
+                              font_size=10, pos=(0.1, 0.7))
+        self.desc_debug = Text('DEBUG: debug', color='white', rotation=0, anchor_x="left",
+                               anchor_y="bottom",
+                               font_size=10, pos=(0.1, 0.6))
         self.desc_remove = Text('REMOVE ACTION: remove action_name', color='white', rotation=0, anchor_x="left",
                                 anchor_y="bottom",
-                                font_size=12, pos=(0.1, 0.7))
+                                font_size=10, pos=(0.1, 0.5))
         self.input_string = Text(self.input_text, color='purple', rotation=0, anchor_x="left", anchor_y="bottom",
-                                 font_size=12, pos=(0.1, 0.5))
+                                 font_size=12, pos=(0.1, 0.3))
         self.log = Text('', color='orange', rotation=0, anchor_x="left", anchor_y="bottom",
-                        font_size=12, pos=(0.1, 0.3))
+                        font_size=12, pos=(0.1, 0.2))
         b4.add(self.desc_add)
+        b4.add(self.desc_save)
+        b4.add(self.desc_load)
+        b4.add(self.desc_debug)
         b4.add(self.desc_remove)
         b4.add(self.input_string)
         b4.add(self.log)
