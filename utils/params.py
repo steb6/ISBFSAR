@@ -23,10 +23,10 @@ class MainConfig(object):
 
 class MetrabsTRTConfig(object):
     def __init__(self):
-        self.yolo_engine_path = 'modules/hpe/modules/{}/yolo.engine'.format(engine_dir)
-        self.image_transformation_path = 'modules/hpe/modules/{}/image_transformation1.engine'.format(engine_dir)
-        self.bbone_engine_path = 'modules/hpe/modules/{}/bbone1.engine'.format(engine_dir)
-        self.heads_engine_path = 'modules/hpe/modules/{}/heads1.engine'.format(engine_dir)
+        self.yolo_engine_path = os.path.join('modules', 'hpe', 'weights', engine_dir, 'yolo.engine')
+        self.image_transformation_path = os.path.join('modules', 'hpe', 'weights', engine_dir, 'image_transformation1.engine')
+        self.bbone_engine_path = os.path.join('modules', 'hpe', 'weights', engine_dir, 'bbone1.engine')
+        self.heads_engine_path = os.path.join('modules', 'hpe', 'weights', engine_dir, 'heads1.engine')
         self.expand_joints_path = 'assets/32_to_122.npy'
         self.skeleton_types_path = 'assets/skeleton_types.pkl'
         self.skeleton = 'smpl+head_30'

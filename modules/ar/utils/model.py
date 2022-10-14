@@ -209,7 +209,7 @@ class PostResNet(nn.Module):
     def __init__(self):
         super().__init__()
         self.act1 = torch.nn.ReLU()
-        self.l1 = torch.nn.Linear(2048, 256)
+        self.l1 = torch.nn.Linear(2048, 256)  # TODO PUT 2048
 
     def forward(self, x):
         x = self.act1(x)
@@ -273,8 +273,9 @@ class TRXOS(nn.Module):
                 resnet = self.myresnet50(pretrained=True)
                 self.features_extractor["rgb"] = nn.Sequential(*list(resnet.children())[:-1])
             else:
-                resnet = resnet50(pretrained=True)
-                self.features_extractor["rgb"] = nn.Sequential(*list(resnet.children())[:-1])
+                resnet = resnet50(pretrained=True)  # weights='ResNet50_Weights.DEFAULT'
+                self.features_extractor["rgb"] = nn.Sequential(*list(resnet.children())[:-1])  # TODO NEW
+                # self.features_extractor["rgb"] = resnet  # TODO OLD
 
         self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s, add_hook=add_hook) for s in args.temp_set])
 

@@ -42,3 +42,4 @@ xpaper2
 .cache
 .python_history
 sink.py
+modules/hpe/weights

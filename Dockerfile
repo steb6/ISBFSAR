@@ -1,4 +1,4 @@
-# docker run -it --rm --gpus=all -v "C:/Users/sberti/PycharmProjects/ISBFSAR":/home/ecub a3bee8da4aa7 /bin/bash
+# docker run -it --rm --gpus=all -v "C:/Users/sberti/PycharmProjects/ISBFSAR":/home/ecub ecub:latest /bin/bash
 # Base human Pipeline Image
 # It starts from a TensorRT container and install python, opencv, pytorch
 FROM nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04

@@ -14,6 +14,9 @@ from utils.params import TRXConfig
 from multiprocessing import Process, Queue
 
 
+docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
+
+
 class ISBFSAR:
     def __init__(self, args, visualizer=True, video_input=None):
         self.input_type = args.input_type
@@ -37,7 +40,7 @@ class ISBFSAR:
 
         # Create communication with host
         BaseManager.register('get_queue')
-        manager = BaseManager(address=("host.docker.internal", 50000), authkey=b'abracadabra')
+        manager = BaseManager(address=("host.docker.internal" if docker else "localhost", 50000), authkey=b'abracadabra')
         manager.connect()
         self._in_queue = manager.get_queue('src_to_sink')  # To get rgb or msg
         self._out_queue = manager.get_queue('sink_to_src')  # To send element to VISPY

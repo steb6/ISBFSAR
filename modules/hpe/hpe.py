@@ -1,4 +1,5 @@
 import copy
+import os
 import pickle
 from modules.hpe.utils.misc import postprocess_yolo_output, homography, get_augmentations, is_within_fov, reconstruct_absolute
 import einops
@@ -53,8 +54,12 @@ class HumanPoseEstimator:
 
         # Load modules
         print("Loading YOLO engine...")
-        self.yolo = Runner(model_config.yolo_engine_path)
+        print(model_config.yolo_engine_path)
+        print(os.path.exists(model_config.yolo_engine_path))
+        self.yolo = Runner(model_config.yolo_engine_path)  # model_config.yolo_engine_path
         if not self.just_box:
+            print("Loading IMAGE TRANSFORMATION engine...")
+            print(model_config.image_transformation_path)
             self.image_transformation = Runner(model_config.image_transformation_path)
             self.bbone = Runner(model_config.bbone_engine_path)
             self.heads = Runner(model_config.heads_engine_path)
