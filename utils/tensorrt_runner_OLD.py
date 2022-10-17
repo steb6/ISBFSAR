@@ -1,8 +1,7 @@
-from pathlib import Path
+import pycuda.autoinit  # IMPORTANT! LEAVE THIS IMPORT HERE
 import numpy as np
 import tensorrt as trt
 import pycuda.driver as cuda
-from loguru import logger
 
 
 class HostDeviceMem(object):
@@ -18,14 +17,12 @@ class HostDeviceMem(object):
 
 
 class Runner:
-    def __init__(self, engine_path):
-        logger.info(f'Loading {Path(engine_path).stem} engine...')
-
-        G_LOGGER = trt.Logger(trt.Logger.ERROR)  # TODO PUT ERROR
+    def __init__(self, engine):
+        G_LOGGER = trt.Logger(trt.Logger.VERBOSE)
         trt.init_libnvinfer_plugins(G_LOGGER, '')
         runtime = trt.Runtime(G_LOGGER)
 
-        with open(engine_path, 'rb') as f:
+        with open(engine, 'rb') as f:
             buf = f.read()
             engine = runtime.deserialize_cuda_engine(buf)
 
@@ -46,7 +43,6 @@ class Runner:
 
         # store
         self.stream = cuda.Stream()
-        self.context = None
         self.context = engine.create_execution_context()
         self.engine = engine
 
@@ -54,18 +50,14 @@ class Runner:
         self.outputs = outputs
         self.bindings = bindings
 
-        self.warmup()
-        logger.success(f'{Path(engine_path).stem} engine loaded')
+    def __call__(self, pc):
 
-    def warmup(self):
-        args = [np.random.rand(*inp.host.shape).astype(inp.host.dtype) for inp in self.inputs]
-        self(*args)
+        if not isinstance(pc, list):
+            pc = [pc]
+        for elem, inp in zip(pc, self.inputs):
 
-    def __call__(self, *args):
-
-        for i, x in enumerate(args):
-            x = x.ravel()
-            np.copyto(self.inputs[i].host, x)
+            elem = elem.ravel()
+            np.copyto(inp.host, elem)
 
         [cuda.memcpy_htod_async(inp.device, inp.host, self.stream) for inp in self.inputs]
         self.context.execute_async_v2(bindings=self.bindings, stream_handle=self.stream.handle)

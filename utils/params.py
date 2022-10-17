@@ -86,7 +86,7 @@ class TRXConfig(object):
         elif input_type == "skeleton":
             self.final_ckpt_path = "modules/ar/modules/raws/DISC.pth"
         elif input_type == "hybrid":
-            self.final_ckpt_path = "modules/ar/modules/raws/hybrid/2500.pth"
+            self.final_ckpt_path = "modules/ar/modules/raws/hybrid/1714_truncated_resnet.pth"
         self.trt_path = 'modules/ar/modules/{}/trx.engine'.format(engine_dir)
         self.seq_len = seq_len
 

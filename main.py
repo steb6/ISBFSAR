@@ -1,3 +1,12 @@
+from utils.params import MetrabsTRTConfig
+
+import tensorrt as trt
+import pycuda.autoinit
+import torch
+from utils.tensorrt_runner import Runner
+
+
+
 import pickle as pkl
 from multiprocessing.managers import BaseManager
 from modules.focus.gaze_estimation.focus import FocusDetector
@@ -15,6 +24,11 @@ from multiprocessing import Process, Queue
 
 
 docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
+
+yolo = Runner(MetrabsTRTConfig().yolo_engine_path)  # model_config.yolo_engine_path
+image_transformation = Runner(MetrabsTRTConfig().image_transformation_path)
+bbone = Runner(MetrabsTRTConfig().bbone_engine_path)
+heads = Runner(MetrabsTRTConfig().heads_engine_path)
 
 
 class ISBFSAR:
