@@ -19,12 +19,12 @@ def create_engine(in_path, out_path, inputs):
 
 
 if __name__ == "__main__":
-    # # YOLO
-    # i = {"input": np.ones(shape=(1, 3, 256, 256), dtype=np.float32)}
-    # create_engine(  # p,
-    #     'modules/hpe/weights/onnxs/yolo.onnx',
-    #     'modules/hpe/weights/engines/docker/yolo.engine',
-    #     i)
+    # YOLO
+    i = {"input": np.ones(shape=(1, 3, 256, 256), dtype=np.float32)}
+    create_engine(  # p,
+        'modules/hpe/weights/onnxs/yolo.onnx',
+        'modules/hpe/weights/engines/docker/yolo.engine',
+        i)
 
     # Image Transformation
     i = {"frame": np.ones(shape=(480, 640, 3), dtype=np.int32),

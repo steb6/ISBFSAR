@@ -39,6 +39,7 @@ RUN /opt/conda/bin/pip install opencv-python einops tqdm playsound pyrealsense2 
 RUN apt-get update
 RUN DEBIAN_FRONTEND=noninteractive apt-get install ffmpeg libsm6 libxext6 -y
 RUN /opt/conda/bin/pip install opencv-python
+RUN /opt/conda/bin/pip install loguru
 
 #ENV LD_LIBRARY_PATH "$LD_LIBRARY_PATH:/usr/local/cuda-11.3/lib:/usr/local/cuda-11.3/lib64:/usr/local/cuda-11.3/compat"
 ENV PATH="/opt/conda/bin:/opt/conda/condabin:${PATH}"

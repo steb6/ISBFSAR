@@ -1,12 +1,3 @@
-from utils.params import MetrabsTRTConfig
-
-import tensorrt as trt
-import pycuda.autoinit
-import torch
-from utils.tensorrt_runner import Runner
-
-
-
 import pickle as pkl
 from multiprocessing.managers import BaseManager
 from modules.focus.gaze_estimation.focus import FocusDetector
@@ -24,11 +15,6 @@ from multiprocessing import Process, Queue
 
 
 docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
-
-yolo = Runner(MetrabsTRTConfig().yolo_engine_path)  # model_config.yolo_engine_path
-image_transformation = Runner(MetrabsTRTConfig().image_transformation_path)
-bbone = Runner(MetrabsTRTConfig().bbone_engine_path)
-heads = Runner(MetrabsTRTConfig().heads_engine_path)
 
 
 class ISBFSAR:
@@ -144,7 +130,7 @@ class ISBFSAR:
         return elements
 
     def log(self, msg):
-        self.output_queue.put(({"log": msg},))
+        self._out_queue.put(({"log": msg},))  # TODO IT LOCKS HERE
         print(msg)
 
     def run(self):
@@ -244,7 +230,7 @@ class ISBFSAR:
             _ = self.get_frame()
 
         self.log("GO!")
-        playsound('assets' + os.sep + 'start.wav')
+        # playsound('assets' + os.sep + 'start.wav')
         data = [[] for _ in range(self.window_size)]
         i = 0
         off_time = (self.acquisition_time / self.window_size)
@@ -262,9 +248,12 @@ class ISBFSAR:
                     data[i].append(res["img_preprocessed"])
                 i += 1
             while (time.time() - start) < off_time:  # Busy wait
+                print(time.time() - start, "time.time() - start")
+                print(off_time, "off_time")
+                print("BUSY")
                 continue
 
-        playsound('assets' + os.sep + 'stop.wav')
+        # playsound('assets' + os.sep + 'stop.wav')
         self.log("100%")
         # If a path to a video is provided
         # else:
@@ -328,6 +317,7 @@ class ISBFSAR:
 
 
 def run_module(module, configurations, input_queue, output_queue):
+    import pycuda.autoinit
     x = module(*configurations)
     while True:
         inp = input_queue.get()

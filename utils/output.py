@@ -157,7 +157,7 @@ class VISPYVisualizer:
         if not elements:
             return
         # Parse elements
-        elements = elements[0]
+        elements = elements[0][0]
         if "log" in elements.keys():
             self.log.text = elements["log"]
         else:

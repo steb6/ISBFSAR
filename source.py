@@ -30,30 +30,24 @@ if __name__ == '__main__':
         processes[proc] = manager.get_queue(proc)
 
     # Create input (camera)
-    print("Creating camera...")
     camera = RealSense(width=MainConfig().cam_width, height=MainConfig().cam_height, fps=60)
 
     # Create output (vispy)
-    print("Creating visualizer...")
     input_queue = Queue(1)
     output_queue = Queue(1)
     output_proc = Process(target=VISPYVisualizer.create_visualizer,
                           args=(output_queue, input_queue))
     output_proc.start()
 
-    print("Starting main loop...")
     while True:
         _, rgb = camera.read()
 
         if not input_queue.empty():  # Vispy sent a command
-            print("Get a message!")
             msg = input_queue.get()
             processes['src_to_sink'].put({'msg': copy.deepcopy(msg)})
         else:
-            print("Sending frame...")
             processes['src_to_sink'].put({'rgb': copy.deepcopy(rgb)})  # TODO MAYBE NOT INDENT
-        print("Waiting for answer...")
         ret = processes['sink_to_src'].get()
-        print("Sending elements to visualizer...")
+        if "log" in ret.keys():
+
         output_queue.put((ret,))
-        print("Done!")

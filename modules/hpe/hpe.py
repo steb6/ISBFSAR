@@ -1,6 +1,8 @@
 import copy
 import os
 import pickle
+import time
+
 from modules.hpe.utils.misc import postprocess_yolo_output, homography, get_augmentations, is_within_fov, reconstruct_absolute
 import einops
 import numpy as np
@@ -53,13 +55,8 @@ class HumanPoseEstimator:
             self.skeleton_types = pickle.load(input_file)
 
         # Load modules
-        print("Loading YOLO engine...")
-        print(model_config.yolo_engine_path)
-        print(os.path.exists(model_config.yolo_engine_path))
         self.yolo = Runner(model_config.yolo_engine_path)  # model_config.yolo_engine_path
         if not self.just_box:
-            print("Loading IMAGE TRANSFORMATION engine...")
-            print(model_config.image_transformation_path)
             self.image_transformation = Runner(model_config.image_transformation_path)
             self.bbone = Runner(model_config.bbone_engine_path)
             self.heads = Runner(model_config.heads_engine_path)
@@ -75,7 +72,9 @@ class HumanPoseEstimator:
         yolo_in = yolo_in / 255.0
 
         # Yolo
+        start = time.time()  # TODO REMOVE DEBUG
         outputs = self.yolo(yolo_in)
+        print("YOLO", time.time() - start)  # TODO REMOVE DEBUG
         boxes, confidences = outputs[0].reshape(1, 4032, 1, 4), outputs[1].reshape(1, 4032, 80)
         bboxes_batch = postprocess_yolo_output(boxes, confidences, self.yolo_thresh, self.nms_thresh)
 
@@ -113,7 +112,9 @@ class HumanPoseEstimator:
 
         # Apply homography
         H = self.K @ np.linalg.inv(new_K @ homo_inv)
-        bbone_in = self.image_transformation([frame.astype(int), H.astype(np.float32)])
+        start = time.time()  # TODO REMOVE DEBUG
+        bbone_in = self.image_transformation(frame.astype(int), H.astype(np.float32))
+        print("IMG", time.time() - start)  # TODO REMOVE DEBUG
 
         bbone_in = bbone_in[0].reshape(self.n_test, 256, 256, 3)  # [..., ::-1]
         # cv2.imshow("BBONE", bbone_in[0].astype(np.uint8))  # TODO SOLVE THE MISTERY
@@ -121,11 +122,15 @@ class HumanPoseEstimator:
         bbone_in_ = (bbone_in / 255.0).astype(np.float32)
 
         # BackBone
+        start = time.time()  # TODO REMOVE DEBUG
         outputs = self.bbone(bbone_in_)
+        print("BBONE", time.time() - start)  # TODO REMOVE DEBUG
         # features = outputs[0].reshape(self.n_test, 8, 8, 1280)
 
         # Heads
-        logits = self.heads(outputs)
+        start = time.time()  # TODO REMOVE DEBUG
+        logits = self.heads(outputs[0])
+        print("HEADS", time.time() - start)  # TODO REMOVE DEBUG
 
         # Get logits 3d  TODO DO THE SAME WITH 2D
         logits = logits[0].reshape(1, 8, 8, 288)
