@@ -157,101 +157,103 @@ class VISPYVisualizer:
         if not elements:
             return
         # Parse elements
-        elements = elements[0][0]
+        elements = elements
+        if "ACK" in elements.keys():  # Just an ack flag
+            return
         if "log" in elements.keys():
             self.log.text = elements["log"]
+
+        fps = elements["fps"]
+        img = elements["img"]
+
+        bbox = elements["bbox"] if "bbox" in elements.keys() else None
+        edges = elements["edges"] if "edges" in elements.keys() else None
+        pose = elements["pose"] if "pose" in elements.keys() else None
+        distance = elements["distance"] if "distance" in elements.keys() else None
+
+        focus = elements["focus"] if "focus" in elements.keys() else None
+
+        results = elements["actions"] if "actions" in elements.keys() else None
+        is_true = elements["is_true"] if "is_true" in elements.keys() else None
+
+        # POSE
+        if pose is not None:  # IF pose is not None, edges is not None
+            theta = 90
+            R = np.matrix([[1, 0, 0],
+                           [0, math.cos(theta), -math.sin(theta)],
+                           [0, math.sin(theta), math.cos(theta)]])
+            pose = pose @ R
+            for i, edge in enumerate(edges):
+                self.lines[i].set_data((pose[[edge[0], edge[1]]]),
+                                       color="purple",
+                                       edge_color="white")
         else:
-            fps = elements["fps"]
-            img = elements["img"]
+            for i in range(len(self.lines)):
+                self.lines[i].set_data(color="grey",
+                                       edge_color="white")
 
-            bbox = elements["bbox"] if "bbox" in elements.keys() else None
-            edges = elements["edges"] if "edges" in elements.keys() else None
-            pose = elements["pose"] if "pose" in elements.keys() else None
-            distance = elements["distance"] if "distance" in elements.keys() else None
+        # IMAGE
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        if bbox is not None:
+            x1, x2, y1, y2 = bbox
+            img = cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 3)
+        self.image.set_data(cv2.flip(img, 0))
 
-            focus = elements["focus"] if "focus" in elements.keys() else None
+        # INFO
+        if focus:
+            self.focus.text = "FOCUS"
+            self.focus.color = "green"
+        else:
+            self.focus.text = "NOT FOC."
+            self.focus.color = "red"
+        self.fps.text = "FPS: {:.2f}".format(fps)
+        self.distance.text = "DIST: {:.2f}m".format(distance) if distance is not None else "DIST:"
 
-            results = elements["actions"] if "actions" in elements.keys() else None
-            is_true = elements["is_true"] if "is_true" in elements.keys() else None
-
-            # POSE
-            if pose is not None:  # IF pose is not None, edges is not None
-                theta = 90
-                R = np.matrix([[1, 0, 0],
-                               [0, math.cos(theta), -math.sin(theta)],
-                               [0, math.sin(theta), math.cos(theta)]])
-                pose = pose @ R
-                for i, edge in enumerate(edges):
-                    self.lines[i].set_data((pose[[edge[0], edge[1]]]),
-                                           color="purple",
-                                           edge_color="white")
-            else:
-                for i in range(len(self.lines)):
-                    self.lines[i].set_data(color="grey",
-                                           edge_color="white")
-
-            # IMAGE
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            if bbox is not None:
-                x1, x2, y1, y2 = bbox
-                img = cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 3)
-            self.image.set_data(cv2.flip(img, 0))
-
-            # INFO
-            if focus:
-                self.focus.text = "FOCUS"
-                self.focus.color = "green"
-            else:
-                self.focus.text = "NOT FOC."
-                self.focus.color = "red"
-            self.fps.text = "FPS: {:.2f}".format(fps)
-            self.distance.text = "DIST: {:.2f}m".format(distance) if distance is not None else "DIST:"
-
+        # Actions
+        m = max(results.values()) if len(results) > 0 else 0  # Just max
+        for i, action in enumerate(results.keys()):
+            score = results[action]
+            requires_focus = False
             # Actions
-            m = max(results.values()) if len(results) > 0 else 0  # Just max
-            for i, action in enumerate(results.keys()):
-                score = results[action]
-                requires_focus = False
-                # Actions
-                if action in self.actions.keys():
-                    text = action  # {:.2f}".format(r, score)
-                    if requires_focus:
-                        text += ' (0_0)'
-                    self.actions[action].text = text
-                    self.values[action].width = score * 0.33
-                    self.actions[action].pos = (1 / 6, 0.6 - (0.1 * i))
-                    self.values[action].center = (2 / 6 + ((score * 0.33) / 2), 0.6 - (0.1 * i))
-                    self.values[action].color = get_color(score)
-                    self.values[action].border_color = get_color(score)
-                else:
-                    self.actions[action] = Text('', rotation=0, anchor_x="center", anchor_y="center", font_size=12,
-                                                pos=(1 / 6, 0.6 - (0.1 * i)), color="white")
-                    self.b2.add(self.actions[action])
-                    self.values[action] = scene.visuals.Rectangle(
-                        center=(3 / 6 + ((score * 0.33) / 2), 0.6 - (0.1 * i)),
-                        color=get_color(score), border_color=get_color(score), height=0.1,
-                        width=score * 0.33)
-                    self.b2.add(self.values[action])
-                # Os score
-                self.actions[action].color = "white"
-                if score == m:
-                    self.os_score.width = is_true * 0.33
-                    self.os_score.center = [(4 / 6) + ((is_true * 0.33) / 2), 0.6 - (0.1 * i)]
-                    self.os_score.color = get_color(is_true)
-                    self.os_score.border_color = get_color(is_true)
-                    if is_true > 0.66:
-                        self.actions[action].color = "green"
+            if action in self.actions.keys():
+                text = action  # {:.2f}".format(r, score)
+                if requires_focus:
+                    text += ' (0_0)'
+                self.actions[action].text = text
+                self.values[action].width = score * 0.33
+                self.actions[action].pos = (1 / 6, 0.6 - (0.1 * i))
+                self.values[action].center = (2 / 6 + ((score * 0.33) / 2), 0.6 - (0.1 * i))
+                self.values[action].color = get_color(score)
+                self.values[action].border_color = get_color(score)
+            else:
+                self.actions[action] = Text('', rotation=0, anchor_x="center", anchor_y="center", font_size=12,
+                                            pos=(1 / 6, 0.6 - (0.1 * i)), color="white")
+                self.b2.add(self.actions[action])
+                self.values[action] = scene.visuals.Rectangle(
+                    center=(3 / 6 + ((score * 0.33) / 2), 0.6 - (0.1 * i)),
+                    color=get_color(score), border_color=get_color(score), height=0.1,
+                    width=score * 0.33)
+                self.b2.add(self.values[action])
+            # Os score
+            self.actions[action].color = "white"
+            if score == m:
+                self.os_score.width = is_true * 0.33
+                self.os_score.center = [(4 / 6) + ((is_true * 0.33) / 2), 0.6 - (0.1 * i)]
+                self.os_score.color = get_color(is_true)
+                self.os_score.border_color = get_color(is_true)
+                if is_true > 0.66:
+                    self.actions[action].color = "green"
 
-            # Remove erased action (if any)
-            to_remove = []
-            for key in self.actions.keys():
-                if key not in results.keys():
-                    to_remove.append(key)
-            for key in to_remove:
-                self.actions[key].parent = None
-                self.values[key].parent = None
-                self.actions.pop(key)
-                self.values.pop(key)
+        # Remove erased action (if any)
+        to_remove = []
+        for key in self.actions.keys():
+            if key not in results.keys():
+                to_remove.append(key)
+        for key in to_remove:
+            self.actions[key].parent = None
+            self.values[key].parent = None
+            self.actions.pop(key)
+            self.values.pop(key)
 
     def on_draw(self, event):
         pass

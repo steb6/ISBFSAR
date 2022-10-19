@@ -54,13 +54,13 @@ class ISBFSAR:
         self.skeleton_scale = args.skeleton_scale
         self.acquisition_time = args.acquisition_time
 
-    def get_frame(self, img=None):
+    def get_frame(self, img=None, log=None):
         """
         get frame, do inference, return all possible info
         """
         start = time.time()
         elements = {}
-        ar_input = []
+        ar_input = {}
 
         # If img is not given (not a video), try to get img
         if img is None:
@@ -87,7 +87,7 @@ class ISBFSAR:
                 img_ = img_ / 255.
                 img_ = img_ * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
                 img_ = img_.swapaxes(-1, -3).swapaxes(-1, -2)
-                ar_input.append(img_)
+                ar_input["rgb"] = img_
                 elements["img_preprocessed"] = img_
 
         # SKELETON CASE
@@ -97,7 +97,7 @@ class ISBFSAR:
                 if pose is not None:
                     pose = pose - pose[0, :]
                     elements["pose"] = pose
-                    ar_input.append(pose.reshape(-1))
+                    ar_input["sk"] = pose.reshape(-1)
                 elements["edges"] = edges
                 if bbox is not None:
                     elements["bbox"] = bbox
@@ -125,86 +125,80 @@ class ISBFSAR:
         fps = sum(fps_s) / len(fps_s)
         elements["fps"] = fps
 
-        self._out_queue.put((elements,))
+        # Msg
+        if log is not None:
+            elements["log"] = log
+
+        self._out_queue.put(elements)
 
         return elements
 
-    def log(self, msg):
-        self._out_queue.put(({"log": msg},))  # TODO IT LOCKS HERE
-        print(msg)
-
     def run(self):
         while True:
-            # # We received a command
-            # if not self.input_queue.empty():
-            #     msg = self.input_queue.get()
-            # else:
-            #     # We didn't receive a command, just do inference
-            #     _ = self.get_frame()
-            #     continue
-
-            # Data is a dict that contains or a "msg" or a "rgb"
+            log = None
             data = self._in_queue.get()
-            if "msg" not in data.keys():
-                _ = self.get_frame(data["rgb"])
-                continue
 
-            msg = data["msg"]
-            msg = msg.strip()
-            msg = msg.split()
+            if data["msg"] != '':
 
-            # select appropriate command
-            if msg[0] == 'close' or msg[0] == 'exit' or msg[0] == 'quit' or msg[0] == 'q':
-                break
+                msg = data["msg"]
+                msg = msg.strip()
+                msg = msg.split()
 
-            elif msg[0] == "add" and len(msg) > 1:
-                self.learn_command(msg[1:])
+                # select appropriate command
+                if msg[0] == 'close' or msg[0] == 'exit' or msg[0] == 'quit' or msg[0] == 'q':
+                    break
 
-            elif msg[0] == "remove" and len(msg) > 1:
-                self.forget_command(msg[1])
+                elif msg[0] == "add" and len(msg) > 1:
+                    self._out_queue.put({"ACK": True})
+                    log = self.learn_command(msg[1:])
+                    data = self._in_queue.get()
 
-            elif msg[0] == "test" and len(msg) > 1:
-                self.test_video(msg[1])
+                elif msg[0] == "remove" and len(msg) > 1:
+                    self.forget_command(msg[1])
 
-            elif msg[0] == "save":
-                self.save()
+                # elif msg[0] == "test" and len(msg) > 1:
+                #     self.test_video(msg[1])
 
-            elif msg[0] == "load":
-                self.load()
+                elif msg[0] == "save":
+                    log = self.save()
 
-            elif msg[0] == "debug":
-                self.debug()
+                elif msg[0] == "load":
+                    log = self.load()
 
-            else:
-                self.log("Not a valid command!")
+                elif msg[0] == "debug":
+                    self.debug()
+                else:
+                    log = "Not a valid command!"
 
-    def test_video(self, path):
-        if not os.path.exists(path):
-            self.log("Video file does not exists!")
-            return
+            self.get_frame(img=data["rgb"], log=log)
 
-        video = cv2.VideoCapture(path)
-        video_length = video.get(cv2.CAP_PROP_FRAME_COUNT)
-        i = 0
-        fps = video.get(cv2.CAP_PROP_FPS)
-        ret, img = video.read()
-        while ret:
-            start = time.time()
-            key = cv2.waitKey(1)
-            if key > -1:
-                break
-            self.log("{:.2f}%".format((i / (video_length - 1)) * 100))
-            _ = self.get_frame(img)
-
-            n_skip = int((time.time() - start) * fps)
-            for _ in range(n_skip):
-                _, _ = video.read()
-                i += 1
-
-            ret, img = video.read()
-            i += 1
-        self.log("100%")
-        video.release()
+    # def test_video(self, path):
+    #     if not os.path.exists(path):
+    #         self.log("Video file does not exists!")
+    #         return
+    #
+    #     video = cv2.VideoCapture(path)
+    #     video_length = video.get(cv2.CAP_PROP_FRAME_COUNT)
+    #     i = 0
+    #     fps = video.get(cv2.CAP_PROP_FPS)
+    #     ret, img = video.read()
+    #     while ret:
+    #         start = time.time()
+    #         key = cv2.waitKey(1)
+    #         if key > -1:
+    #             break
+    #         self.log("{:.2f}%".format((i / (video_length - 1)) * 100))
+    #         _ = self.get_frame(img)
+    #
+    #         n_skip = int((time.time() - start) * fps)
+    #         for _ in range(n_skip):
+    #             _, _ = video.read()
+    #             i += 1
+    #
+    #         ret, img = video.read()
+    #         i += 1
+    #     self.log("100%")
+    #     video.release()
 
     def forget_command(self, flag):
         self.ar.remove(flag)
@@ -224,20 +218,18 @@ class ISBFSAR:
     def learn_command(self, flag):
         flag = flag[0]
 
-        self.log("WAIT...")
         now = time.time()
         while (time.time() - now) < 3:
-            _ = self.get_frame()
+            self.get_frame(log="WAIT...")
 
-        self.log("GO!")
+        self.get_frame(log="GO!")
         # playsound('assets' + os.sep + 'start.wav')
         data = [[] for _ in range(self.window_size)]
         i = 0
         off_time = (self.acquisition_time / self.window_size)
         while i < self.window_size:
-            self.log("{:.2f}%".format((i / (self.window_size - 1)) * 100))
             start = time.time()
-            res = self.get_frame()
+            res = self.get_frame(log="{:.2f}%".format((i / (self.window_size - 1)) * 100))
             # Check if the sample is good w.r.t. input type
             good = self.input_type in ["skeleton", "hybrid"] and "pose" in res.keys() and res["pose"] is not None
             good = good or self.input_type == "rgb"
@@ -254,7 +246,8 @@ class ISBFSAR:
                 continue
 
         # playsound('assets' + os.sep + 'stop.wav')
-        self.log("100%")
+        # self.log("100%")
+
         # If a path to a video is provided
         # else:
         #     if not os.path.exists(flag[0]):
@@ -290,7 +283,6 @@ class ISBFSAR:
         #     data = np.stack(poses)
         #     data = data[:(len(data) - (len(data) % self.window_size))]
         #     data = data[list(range(0, len(data), int(len(data) / self.window_size)))]
-        self.log("Success!")
         inp = {"flag": flag,
                "data": {}}
 
@@ -301,19 +293,21 @@ class ISBFSAR:
         if self.input_type == "hybrid":
             inp["data"]["imgs"] = np.stack([x[1] for x in data])
         self.ar.train(inp)
+        return "Action " + flag + " learned successfully!"
 
     def save(self):
         with open('assets/saved/support_set.pkl', 'wb') as outfile:
             pkl.dump(self.ar.support_set, outfile)
         with open('assets/saved/requires_focus.pkl', 'wb') as outfile:
             pkl.dump(self.ar.requires_focus, outfile)
+        return "Classes saved successfully in " + 'assets/saved/support_set.pkl'
 
     def load(self):
         with open('assets/saved/support_set.pkl', 'rb') as pkl_file:
             self.ar.support_set = pkl.load(pkl_file)
         with open('assets/saved/requires_focus.pkl', 'rb') as pkl_file:
             self.ar.requires_focus = pkl.load(pkl_file)
-        self.log(f"Loaded {len(self.ar.support_set)} classes")
+        return f"Loaded {len(self.ar.support_set)} classes"
 
 
 def run_module(module, configurations, input_queue, output_queue):

@@ -33,21 +33,22 @@ if __name__ == '__main__':
     camera = RealSense(width=MainConfig().cam_width, height=MainConfig().cam_height, fps=60)
 
     # Create output (vispy)
-    input_queue = Queue(1)
-    output_queue = Queue(1)
+    vispy_in_q = Queue(1)
+    vispy_out_q = Queue(1)
     output_proc = Process(target=VISPYVisualizer.create_visualizer,
-                          args=(output_queue, input_queue))
+                          args=(vispy_out_q, vispy_in_q))
     output_proc.start()
 
+    elems = {}
     while True:
         _, rgb = camera.read()
 
-        if not input_queue.empty():  # Vispy sent a command
-            msg = input_queue.get()
-            processes['src_to_sink'].put({'msg': copy.deepcopy(msg)})
-        else:
-            processes['src_to_sink'].put({'rgb': copy.deepcopy(rgb)})  # TODO MAYBE NOT INDENT
-        ret = processes['sink_to_src'].get()
-        if "log" in ret.keys():
+        # Prepare inference with rgb and optional command got from Vispy
+        elems['rgb'] = copy.deepcopy(rgb)
+        elems['msg'] = '' if vispy_in_q.empty() else copy.deepcopy(vispy_in_q.get())
 
-        output_queue.put((ret,))
+        # Send to main
+        processes['src_to_sink'].put(elems)
+
+        # Send results to visualizer
+        vispy_out_q.put(processes['sink_to_src'].get())

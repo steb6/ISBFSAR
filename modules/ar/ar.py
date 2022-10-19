@@ -1,10 +1,10 @@
-import pickle
 from collections import OrderedDict
 import numpy as np
 from modules.ar.utils.model import TRXOS
 from utils.params import TRXConfig
 import torch
 from tqdm import tqdm
+import copy
 
 
 class ActionRecognizer:
@@ -39,15 +39,18 @@ class ActionRecognizer:
             return {}, 0
 
         # Process new frame
-        data = [torch.FloatTensor(x).cuda() for x in data]
-        self.previous_frames.append(data)
+        data = {k: torch.FloatTensor(v).cuda() for k, v in data.items()}
+        self.previous_frames.append(copy.deepcopy(data))
         if len(self.previous_frames) < self.seq_len:  # few samples
             return {}, 0
         elif len(self.previous_frames) == self.seq_len + 1:
             self.previous_frames = self.previous_frames[1:]  # add as last frame
 
-        # Predict actual action
-        data = [torch.stack([i[j] for i in self.previous_frames]).unsqueeze(0) for j in range(len(self.previous_frames[0]))]
+        # Prepare query with previous frames
+        for t in list(data.keys()):
+            data[t] = torch.stack([elem[t] for elem in self.previous_frames])
+            if t == "sk":
+                data[t] = data[t].unsqueeze(0)
         labels = torch.IntTensor(list(range(self.way))).unsqueeze(0).cuda()
 
         # Get SS
@@ -56,16 +59,16 @@ class ActionRecognizer:
         if all('features' in self.support_set[c].keys() for c in self.support_set.keys()):
             ss_f = torch.stack([self.support_set[c]["features"] for c in self.support_set.keys()])  # 3 16 90
             pad = torch.zeros_like(ss_f[0]).unsqueeze(0)
-            while ss_f.shape[0] < 5:
+            while ss_f.shape[0] < self.way:
                 ss_f = torch.concat((ss_f, pad), dim=0)
             ss_f = ss_f.unsqueeze(0)  # Add batch dimension
         else:
-            ss = []  # TODO INFERENCE SHOULD NOT COMPUTE PROTOTYPES EVERY TIME
+            ss = {}
             if self.input_type in ["rgb", "hybrid"]:
-                ss.append(torch.stack([self.support_set[c]["imgs"] for c in self.support_set.keys()]).unsqueeze(0))
+                ss["rgb"] = torch.stack([self.support_set[c]["imgs"] for c in self.support_set.keys()]).unsqueeze(0)
             if self.input_type in ["skeleton", "hybrid"]:
-                ss.append(torch.stack([self.support_set[c]["poses"] for c in self.support_set.keys()]).unsqueeze(0))
-            for i in range(len(ss)):  # Pad supports
+                ss["sk"] = torch.stack([self.support_set[c]["poses"] for c in self.support_set.keys()]).unsqueeze(0)
+            for i in ss.keys():  # Pad supports
                 pad = torch.zeros_like(ss[i][:, 0].unsqueeze(1))
                 while ss[i].shape[1] < 5:
                     ss[i] = torch.concat((ss[i], pad), dim=1)
