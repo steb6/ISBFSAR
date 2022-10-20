@@ -1,10 +1,10 @@
 import platform
 import os
 
-docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
 input_type = "skeleton"  # rgb, skeleton or hybrid
-seq_len = 8 if input_type != "skeleton" else 16
 
+docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
+seq_len = 8 if input_type != "skeleton" else 16
 ubuntu = platform.system() == "Linux"
 engine_dir = "engines" if not docker else os.path.join("engines", "docker")
 print("Ubuntu: {}".format(ubuntu))
@@ -63,13 +63,14 @@ class TRXConfig(object):
         self.initial_lr = 1e-2 if self.input_type == "skeleton" else 3e-4
         self.n_task = (100 if self.input_type == "skeleton" else 30) if not ubuntu else (10000 if self.input_type == "skeleton" else 500)
         self.optimize_every = 1  # Put to 1 if not used, not 0 or -1!
-        self.batch_size = 4  # 1 if not ubuntu else (32 if self.input_type == "skeleton" else 4)
+        self.batch_size = 1 if not ubuntu else (32 if self.input_type == "skeleton" else 4)
         self.n_epochs = 10000
         self.start_discriminator_after_epoch = 0  # self.n_epochs  # TODO CAREFUL
         self.first_mile = self.n_epochs  # 15 TODO CAREFUL
         self.second_mile = self.n_epochs  # 1500 TODO CAREFUL
-        self.n_workers = 0 if not ubuntu else 16
+        self.n_workers = 0 if not ubuntu else 32
         self.log_every = 10 if not ubuntu else 1000
+        self.eval_every_n_epoch = 10
 
         # MODEL
         self.trans_linear_in_dim = 256 if self.input_type == "skeleton" else 1000 if self.input_type == "rgb" else 512

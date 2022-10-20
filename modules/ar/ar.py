@@ -15,43 +15,40 @@ class ActionRecognizer:
         self.ar = TRXOS(TRXConfig(), add_hook=add_hook)
         # Fix dataparallel
         state_dict = torch.load(args.final_ckpt_path, map_location=torch.device(0))['model_state_dict']
-        state_dict = {param.replace('.module', ''): data for param, data in state_dict.items()}
+        state_dict = OrderedDict({param.replace('.module', ''): data for param, data in state_dict.items()})
         self.ar.load_state_dict(state_dict)
         self.ar.cuda()
         self.ar.eval()
 
         self.support_set = OrderedDict()
+        self.requires_focus = {}
         self.previous_frames = []
         self.seq_len = args.seq_len
         self.way = args.way
         self.n_joints = args.n_joints if args.input_type == "skeleton" else 0
-
-        self.requires_focus = [False for _ in range(args.way)]
 
     def inference(self, data):
         """
         It receives an iterable of data that contains poses, images or both
         """
         if data is None or len(data) == 0:
-            return {}, 0
+            return {}, 0, {}
 
         if len(self.support_set) == 0:  # no class to predict
-            return {}, 0
+            return {}, 0, {}
 
         # Process new frame
         data = {k: torch.FloatTensor(v).cuda() for k, v in data.items()}
         self.previous_frames.append(copy.deepcopy(data))
         if len(self.previous_frames) < self.seq_len:  # few samples
-            return {}, 0
+            return {}, 0, {}
         elif len(self.previous_frames) == self.seq_len + 1:
             self.previous_frames = self.previous_frames[1:]  # add as last frame
 
         # Prepare query with previous frames
         for t in list(data.keys()):
-            data[t] = torch.stack([elem[t] for elem in self.previous_frames])
-            if t == "sk":
-                data[t] = data[t].unsqueeze(0)
-        labels = torch.IntTensor(list(range(self.way))).unsqueeze(0).cuda()
+            data[t] = torch.stack([elem[t] for elem in self.previous_frames]).unsqueeze(0)
+        labels = torch.IntTensor(list(range(len(self.support_set)))).unsqueeze(0).cuda()
 
         # Get SS
         ss = None
@@ -68,10 +65,10 @@ class ActionRecognizer:
                 ss["rgb"] = torch.stack([self.support_set[c]["imgs"] for c in self.support_set.keys()]).unsqueeze(0)
             if self.input_type in ["skeleton", "hybrid"]:
                 ss["sk"] = torch.stack([self.support_set[c]["poses"] for c in self.support_set.keys()]).unsqueeze(0)
-            for i in ss.keys():  # Pad supports
-                pad = torch.zeros_like(ss[i][:, 0].unsqueeze(1))
-                while ss[i].shape[1] < 5:
-                    ss[i] = torch.concat((ss[i], pad), dim=1)
+            # for i in ss.keys():  # Pad supports  TODO TRY TO REMOVE THIS
+            #     pad = torch.zeros_like(ss[i][:, 0].unsqueeze(1))
+            #     while ss[i].shape[1] < 5:
+            #         ss[i] = torch.concat((ss[i], pad), dim=1)
         with torch.no_grad():
             outputs = self.ar(ss, labels, data, ss_features=ss_f)  # RGB, POSES
 
@@ -88,13 +85,19 @@ class ActionRecognizer:
         results = {}
         for k in range(len(self.support_set)):
             results[list(self.support_set.keys())[k]] = (few_shot_result[k])
-        return results, open_set_result
+        return results, open_set_result, self.requires_focus
 
     def remove(self, flag):
-        self.support_set.pop(flag)
+        if flag in self.support_set.keys():
+            self.support_set.pop(flag)
+            self.requires_focus.pop(flag)
+            return True
+        else:
+            return False
 
     def train(self, inp):
         self.support_set[inp['flag']] = {c: torch.FloatTensor(inp['data'][c]).cuda() for c in inp['data'].keys()}
+        self.requires_focus[inp['flag']] = inp['requires_focus']
 
 
 if __name__ == "__main__":

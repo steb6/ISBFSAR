@@ -105,6 +105,7 @@ class VISPYVisualizer:
         self.os_score = scene.visuals.Rectangle(center=(2, 2), color="white", border_color="white", height=0.1)
         self.b2.add(self.os_score)
 
+        self.focuses = {}
         self.actions = {}
         self.values = {}
 
@@ -172,9 +173,11 @@ class VISPYVisualizer:
         distance = elements["distance"] if "distance" in elements.keys() else None
 
         focus = elements["focus"] if "focus" in elements.keys() else None
+        face_bbox = elements["face_bbox"] if "face_bbox" in elements.keys() else None
 
         results = elements["actions"] if "actions" in elements.keys() else None
         is_true = elements["is_true"] if "is_true" in elements.keys() else None
+        requires_focus = elements["requires_focus"] if "requires_focus" in elements.keys() else None
 
         # POSE
         if pose is not None:  # IF pose is not None, edges is not None
@@ -196,7 +199,11 @@ class VISPYVisualizer:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         if bbox is not None:
             x1, x2, y1, y2 = bbox
-            img = cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 3)
+            img = cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 3)
+        if face_bbox is not None:
+            x1, y1, x2, y2 = face_bbox
+            color = (255, 0, 0) if not focus else (0, 255, 0)
+            img = cv2.rectangle(img, (x1, y1), (x2, y2), color, 3)
         self.image.set_data(cv2.flip(img, 0))
 
         # INFO
@@ -213,27 +220,33 @@ class VISPYVisualizer:
         m = max(results.values()) if len(results) > 0 else 0  # Just max
         for i, action in enumerate(results.keys()):
             score = results[action]
-            requires_focus = False
             # Actions
             if action in self.actions.keys():
                 text = action  # {:.2f}".format(r, score)
-                if requires_focus:
-                    text += ' (0_0)'
                 self.actions[action].text = text
                 self.values[action].width = score * 0.33
                 self.actions[action].pos = (1 / 6, 0.6 - (0.1 * i))
                 self.values[action].center = (2 / 6 + ((score * 0.33) / 2), 0.6 - (0.1 * i))
                 self.values[action].color = get_color(score)
                 self.values[action].border_color = get_color(score)
+                if action in self.focuses.keys():
+                    self.focuses[action].color = 'red' if not focus else 'green'
             else:
+                # Action label
                 self.actions[action] = Text('', rotation=0, anchor_x="center", anchor_y="center", font_size=12,
                                             pos=(1 / 6, 0.6 - (0.1 * i)), color="white")
                 self.b2.add(self.actions[action])
+                # Few Shot Label
                 self.values[action] = scene.visuals.Rectangle(
                     center=(3 / 6 + ((score * 0.33) / 2), 0.6 - (0.1 * i)),
                     color=get_color(score), border_color=get_color(score), height=0.1,
                     width=score * 0.33)
                 self.b2.add(self.values[action])
+                # Eye for focus
+                if requires_focus[action]:
+                    self.focuses[action] = Text('0.0', rotation=0, anchor_x="center", anchor_y="center", font_size=12,
+                                                pos=(1 / 24, 0.6 - (0.1 * i)), color="white")
+                    self.b2.add(self.focuses[action])
             # Os score
             self.actions[action].color = "white"
             if score == m:
@@ -242,8 +255,10 @@ class VISPYVisualizer:
                 self.os_score.color = get_color(is_true)
                 self.os_score.border_color = get_color(is_true)
                 if is_true > 0.66:
-                    self.actions[action].color = "green"
-
+                    if requires_focus[action]:
+                        self.actions[action].color = "green" if focus else "orange"
+                    else:
+                        self.actions[action].color = "green"
         # Remove erased action (if any)
         to_remove = []
         for key in self.actions.keys():
@@ -254,6 +269,9 @@ class VISPYVisualizer:
             self.values[key].parent = None
             self.actions.pop(key)
             self.values.pop(key)
+            if key in self.focuses.keys():
+                self.focuses[key].parent = None
+                self.focuses[key].pop(key)
 
     def on_draw(self, event):
         pass

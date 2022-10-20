@@ -106,16 +106,17 @@ class ISBFSAR:
 
         # Make inference
         results = self.ar.inference(ar_input)
-        actions, is_true = results
+        actions, is_true, requires_focus = results
         elements["actions"] = actions
         elements["is_true"] = is_true
+        elements["requires_focus"] = requires_focus
 
         # FOCUS #######################################################
         focus_ret = self.focus_out.get()
         if focus_ret is not None:
             focus, face = focus_ret
             elements["focus"] = focus
-            # img = self.focus.print_bbox(img, face)  # TODO PRINT FACE AGAIN
+            elements["face_bbox"] = face.bbox.reshape(-1)
 
         end = time.time()
 
@@ -149,12 +150,12 @@ class ISBFSAR:
                     break
 
                 elif msg[0] == "add" and len(msg) > 1:
-                    self._out_queue.put({"ACK": True})
+                    self._out_queue.put({"ACK": True})  # This must be sent as answer to not stop the program
                     log = self.learn_command(msg[1:])
                     data = self._in_queue.get()
 
                 elif msg[0] == "remove" and len(msg) > 1:
-                    self.forget_command(msg[1])
+                    log = self.forget_command(msg[1])
 
                 # elif msg[0] == "test" and len(msg) > 1:
                 #     self.test_video(msg[1])
@@ -201,7 +202,10 @@ class ISBFSAR:
     #     video.release()
 
     def forget_command(self, flag):
-        self.ar.remove(flag)
+        if self.ar.remove(flag):
+            return "Action {} removed".format(flag)
+        else:
+            return "Action {} is not in the support set".format(flag)
 
     def debug(self):
         ss = self.ar.support_set
@@ -216,8 +220,8 @@ class ISBFSAR:
         cv2.waitKey(0)
 
     def learn_command(self, flag):
+        requires_focus = "-focus" in flag
         flag = flag[0]
-
         now = time.time()
         while (time.time() - now) < 3:
             self.get_frame(log="WAIT...")
@@ -240,9 +244,6 @@ class ISBFSAR:
                     data[i].append(res["img_preprocessed"])
                 i += 1
             while (time.time() - start) < off_time:  # Busy wait
-                print(time.time() - start, "time.time() - start")
-                print(off_time, "off_time")
-                print("BUSY")
                 continue
 
         # playsound('assets' + os.sep + 'stop.wav')
@@ -284,7 +285,8 @@ class ISBFSAR:
         #     data = data[:(len(data) - (len(data) % self.window_size))]
         #     data = data[list(range(0, len(data), int(len(data) / self.window_size)))]
         inp = {"flag": flag,
-               "data": {}}
+               "data": {},
+               "requires_focus": requires_focus}
 
         if self.input_type == "rgb":  # Unique case with images in first position
             inp["data"]["imgs"] = np.stack([x[0] for x in data])

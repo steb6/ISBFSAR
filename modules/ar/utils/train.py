@@ -4,7 +4,7 @@ import torch
 from torch.optim.lr_scheduler import MultiStepLR
 import wandb
 from tqdm import tqdm
-from modules.ar.utils.dataloader import EpisodicLoader
+from modules.ar.utils.dataloader import EpisodicLoader, MyLoader
 from modules.ar.utils.model import TRXOS
 from utils.params import TRXConfig
 from utils.params import ubuntu
@@ -56,11 +56,16 @@ if __name__ == "__main__":
         model.distribute_model()
 
     # Create dataset iterator
-    train_data = EpisodicLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type,)
+    train_data = MyLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type, l=args.seq_len)
+    valid_data = MyLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type, l=args.seq_len)
 
-    # Exclude test classes and create iterator
-    train_data.classes = list(filter(lambda x: x not in test_classes, train_data.classes))
+    all_classes = list(filter(lambda x: x not in test_classes, train_data.all_classes))
+    idx = int(len(all_classes)*0.8)
+    train_data.all_classes, valid_data.all_classes = all_classes[:idx], all_classes[idx:]
+
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, num_workers=args.n_workers,
+                                               shuffle=True)
+    valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.batch_size, num_workers=args.n_workers,
                                                shuffle=True)
 
     # Create optimizer and scheduler
@@ -75,9 +80,13 @@ if __name__ == "__main__":
         wandb.watch(model, log='all', log_freq=args.log_every)
 
     # Log
+    print("Input type:", args.input_type)
     print("Train samples: {}".format(len(train_loader)))
+    print("Valid samples: {}".format(len(valid_loader)))
     print("Training for {} epochs".format(args.n_epochs))
     print("Batch size is {}".format(args.batch_size))
+    print(f"Using {args.n_workers} workers")
+    print(f"Eval is done every {args.eval_every_n_epoch} epochs")
 
     # Losses
     os_loss_fn = torch.nn.BCELoss()
@@ -85,21 +94,22 @@ if __name__ == "__main__":
 
     for epoch in range(args.n_epochs):
 
-        fs_train_losses = []
-        fs_train_accuracies = []
-        os_train_losses = []
-        os_train_pred = []
-        os_train_true = []
+        fs_losses = []
+        fs_accuracies = []
+        os_losses = []
+        os_preds = []
+        os_trues = []
         os_outs = []
+        do_eval = (epoch % 10) == 0
 
         # TRAIN
-        model.train()
-        for i, elem in enumerate(tqdm(train_loader)):
+        model.train() if not do_eval else model.eval()
+        for i, elem in enumerate(tqdm(train_loader if not do_eval else valid_loader)):
 
             # Extract from dict, convert, move to GPU
-            support_set = [elem['support_set'][t].float().to(device) for t in elem['support_set'].keys()]
-            target_set = [elem['target_set'][t].float().to(device) for t in elem['target_set'].keys()]
-            unknown_set = [elem['unknown_set'][t].float().to(device) for t in elem['unknown_set'].keys()]
+            support_set = {t: elem['support_set'][t].float().to(device) for t in elem['support_set'].keys()}
+            target_set = {t: elem['target_set'][t].float().to(device) for t in elem['target_set'].keys()}
+            unknown_set = {t: elem['unknown_set'][t].float().to(device) for t in elem['unknown_set'].keys()}
 
             support_labels = torch.arange(args.way).repeat(b).reshape(b, args.way).to(device).int()
             target = (elem['support_classes'] == elem['target_class'][..., None]).float().to(device)
@@ -112,11 +122,11 @@ if __name__ == "__main__":
             # FS known
             fs_pred = out['logits']
             known_fs_loss = fs_loss_fn(fs_pred, target)
-            fs_train_losses.append(known_fs_loss.item())
+            fs_losses.append(known_fs_loss.item())
             final_loss = known_fs_loss
 
             train_accuracy = torch.eq(torch.argmax(fs_pred, dim=1), torch.argmax(target, dim=1)).float().mean().item()
-            fs_train_accuracies.append(train_accuracy)
+            fs_accuracies.append(train_accuracy)
 
             if epoch > args.start_discriminator_after_epoch-1:
                 # OS known (target depends on true class)
@@ -131,9 +141,9 @@ if __name__ == "__main__":
 
                 if target.sum() > 0:  # TODO do something like this to train discriminator with batch size = 1
                     known_os_loss = os_loss_fn(os_pred, target)
-                    os_train_true.append(target.cpu().numpy())
-                    os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
-                    os_train_losses.append(known_os_loss.item())
+                    os_trues.append(target.cpu().numpy())
+                    os_preds.append((os_pred > 0.5).float().cpu().numpy())
+                    os_losses.append(known_os_loss.item())
 
                     # TODO EXPERIMENT TO TRAIN RGB
                     # known_os_loss.backward()
@@ -156,9 +166,9 @@ if __name__ == "__main__":
                     target = target[:n]
 
                     unknown_os_loss = os_loss_fn(os_pred, target)
-                    os_train_losses.append(unknown_os_loss.item())
-                    os_train_true.append(target.cpu().numpy())
-                    os_train_pred.append((os_pred > 0.5).float().cpu().numpy())
+                    os_losses.append(unknown_os_loss.item())
+                    os_trues.append(target.cpu().numpy())
+                    os_preds.append((os_pred > 0.5).float().cpu().numpy())
 
                     # TODO EXPERIMENT TO TRAIN RGB
                     # unknown_os_loss.backward()
@@ -172,35 +182,39 @@ if __name__ == "__main__":
             # Optimize #
             ############
             final_loss = final_loss / args.optimize_every
-            final_loss.backward()
+            if not do_eval:
+                final_loss.backward()
 
-            if i % args.optimize_every == 0:
-                optimizer.step()
-                optimizer.zero_grad()
+                if i % args.optimize_every == 0:
+                    optimizer.step()
+                    optimizer.zero_grad()
 
-        scheduler.step()  # TODO READD IF NEEDED
+        if not do_eval:
+            scheduler.step()
 
         # WANDB
-        os_train_true = np.concatenate(os_train_true, axis=None) if len(os_train_true) > 0 else np.zeros(1)
-        os_train_pred = np.concatenate(os_train_pred, axis=None) if len(os_train_pred) > 0 else np.zeros(1)
+        os_trues = np.concatenate(os_trues, axis=None) if len(os_trues) > 0 else np.zeros(1)
+        os_preds = np.concatenate(os_preds, axis=None) if len(os_preds) > 0 else np.zeros(1)
         epoch_path = checkpoints_path + os.sep + '{}.pth'.format(epoch)
         if ubuntu:
-            wandb.log({"train/fs_loss": sum(fs_train_losses) / len(fs_train_losses),
-                       "train/fs_accuracy": sum(fs_train_accuracies) / len(fs_train_accuracies),
-                       "train/os_loss": (sum(os_train_losses) / len(os_train_losses)) if len(os_train_losses) > 0 else 0,
-                       "train/os_accuracy": accuracy_score(os_train_true, os_train_pred),
-                       "train/os_precision": precision_score(os_train_true, os_train_pred, zero_division=0),
-                       "train/os_recall": recall_score(os_train_true, os_train_pred, zero_division=0),
-                       "train/os_f1": f1_score(os_train_true, os_train_pred, zero_division=0),
-                       "train/os_n_1_true": os_train_true.mean(),
-                       "train/os_n_1_pred": os_train_pred.mean(),
+            lbl = "train" if not do_eval else "valid"
+            wandb.log({lbl+"/fs_loss": sum(fs_losses) / len(fs_losses),
+                       lbl+"/fs_accuracy": sum(fs_accuracies) / len(fs_accuracies),
+                       lbl+"/os_loss": (sum(os_losses) / len(os_losses)) if len(os_losses) > 0 else 0,
+                       lbl+"/os_accuracy": accuracy_score(os_trues, os_preds),
+                       lbl+"/os_precision": precision_score(os_trues, os_preds, zero_division=0),
+                       lbl+"/os_recall": recall_score(os_trues, os_preds, zero_division=0),
+                       lbl+"/os_f1": f1_score(os_trues, os_preds, zero_division=0),
+                       lbl+"/os_n_1_true": os_trues.mean(),
+                       lbl+"/os_n_1_pred": os_preds.mean(),
                        "lr": optimizer.param_groups[0]['lr'],
                        "os_outs": wandb.Histogram(np.concatenate(os_outs, axis=0)) if len(os_outs) > 0 else [0]})
 
-        torch.save({'epoch': epoch,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict()},
-                   epoch_path)
+        if not do_eval:
+            torch.save({'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict()},
+                       epoch_path)
 
     if ubuntu:
         run.join()

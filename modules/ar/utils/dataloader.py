@@ -38,6 +38,7 @@ class MyLoader(data.Dataset):
 
         self.n_task = n_task
         self.query_class = query_class
+        self.queries = None
         if self.query_class:
             self.queries = []
             for class_dir in next(os.walk(os.path.join(queries_path, query_class)))[1]:
@@ -57,25 +58,28 @@ class MyLoader(data.Dataset):
         imgs = []
         poses = []
         i = 0
-        while True:  # Load one image at time
+        while True:
             try:
-                with open(os.path.join(path, f"{i}.pkl"), 'rb') as file:
-                    # Load skeleton
-                    pose = pickle.load(file)
+                # Load pose
+                if self.input_type in ["hybrid", "skeleton"]:
+                    with open(os.path.join(path, f"{i}.pkl"), 'rb') as file:
+                        # Load skeleton
+                        pose = pickle.load(file)
                     poses.append(pose.reshape(-1))
-                    # Load image
+                # Load image
+                if self.input_type in ["rgb", "hybrid"]:
                     img = cv2.imread(os.path.join(path, f"{i}.png"))
                     img = cv2.resize(img, (224, 224))
                     img = img / 255.
                     img = img * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
                     imgs.append(img.swapaxes(-1, -2).swapaxes(-2, -3))
-                    i += 1
-                if len(poses) == self.max_l:
+                i += 1
+                if i == self.max_l:
                     break
             except Exception as e:
                 print("[ERROR]: Erase this directory:", path, e)
                 # Reset
-                if not original_path:
+                if not original_path:  # Not a fixed query, just a random one, try again random
                     path = random.sample(sequences, 1)[0]  # Get first random file
                     path = os.path.join(self.queries_path, class_name, path)  # Create full path
                     imgs = []
@@ -88,12 +92,16 @@ class MyLoader(data.Dataset):
         if self.default_sample is None:
             self.default_sample = imgs, poses
 
-        if self.l != self.max_l:
-            return np.stack(imgs)[list(range(0, 16, 2))], np.stack(poses)[list(range(0, 16, 2))]
-        return np.stack(imgs), np.stack(poses)
+        sample = {}
+        if self.input_type in ["hybrid", "rgb"]:
+            sample["rgb"] = np.stack(imgs) if self.l == self.max_l else np.stack(imgs)[list(range(0, 16, 2))]
+        if self.input_type in ["hybrid", "skeleton"]:
+            sample["sk"] = np.stack(poses) if self.l == self.max_l else np.stack(poses)[list(range(0, 16, 2))]
+
+        return sample
 
     def __getitem__(self, _):  # Must return complete, imp_x and impl_y
-        support_classes = random.sample(self.classes, self.k) if not self.support_classes else self.support_classes
+        support_classes = random.sample(self.all_classes, self.k) if not self.support_classes else self.support_classes
         target_class = random.sample(support_classes, 1)[0]
         unknown_class = random.sample([x for x in self.all_classes if x not in support_classes], 1)[0]
 
@@ -101,12 +109,9 @@ class MyLoader(data.Dataset):
         target_set = self.get_sample(target_class, path=self.queries[_] if self.queries else None)
         unknown_set = self.get_sample(unknown_class)
 
-        return {'support_set': {"rgb": np.stack([x[0] for x in support_set]),
-                                "sk": np.stack([x[1] for x in support_set])},
-                'target_set': {"rgb": target_set[0],
-                               "sk": target_set[1]},
-                'unknown_set': {"rgb": unknown_set[0],
-                                "sk": unknown_set[1]},
+        return {'support_set': {t: np.stack([elem[t] for elem in support_set]) for t in support_set[0].keys()},
+                'target_set': target_set,
+                'unknown_set': unknown_set,
                 'support_classes': np.stack([self.all_classes.index(elem) for elem in support_classes]),
                 'target_class': self.all_classes.index(target_class),
                 'unknown_class': self.all_classes.index(unknown_class),
@@ -219,13 +224,14 @@ class FSOSEpisodicLoader(data.Dataset):
                 img = cv2.imread(os.path.join(path, f"{i}.png"))
                 img = cv2.resize(img, (224, 224))
                 img = img / 255.
-                img = img * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
+                img = (img * np.array([0.229, 0.224, 0.225])) + np.array([0.485, 0.456, 0.406])
                 imgs.append(img.swapaxes(-1, -2).swapaxes(-2, -3))
                 i += 1
             if len(poses) == self.l:
                 break
         if seq_len == 8:
-            return np.stack(imgs)[list(range(0, 16, 2))], np.stack(poses)[list(range(0, 16, 2))]
+            chosen = list(range(0, 16, 2))
+            return np.stack(imgs)[chosen], np.stack(poses)[chosen]
         return np.stack(imgs), np.stack(poses)
 
     def __getitem__(self, i):  # Must return complete, imp_x and impl_y
@@ -262,7 +268,7 @@ if __name__ == "__main__":
         skeleton_types = pickle.load(input_file)
     edges = skeleton_types[skeleton]['edges']
 
-    loader = EpisodicLoader(TRXConfig().data_path, input_type="hybrid")
+    loader = MyLoader(TRXConfig().data_path, input_type="hybrid")
     vis = MPLPosePrinter()
 
     for asd in loader:
