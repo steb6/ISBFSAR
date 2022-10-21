@@ -4,6 +4,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/stefanoberti/ISBFSAR.svg?style=flat-square&logo=github&label=Stars&logoColor=white)](https://github.com/hysts/pytorch_mpiigaze)
 
 The aim of this project is to provide an efficient pipeline for Action Recognition in Human Robot Interaction.
+
 The whole 3D human pose is estimated and used to understand which action inside the support set the human is performing.
 Action can be easily added or removed from the support set in any moment.
 The Open-Set score confirms or rejects the Few-Shot prediction to avoid false positives.
@@ -19,7 +20,8 @@ This repository contains different modules:
 
 The program is divided into two parts:
 - [source.py](source.py) runs on the host machine, it connects to the RealSense (or webcam), it provides frames to [main.py](main.py), it visualizes the results with the [VISPYVisualizer](utils/output.py)
-- [main.py](main.py) runs either in a Conda environment or in a Docker, it is responsible for all the computation part
+- [main.py](main.py) runs either in a Conda environment or in a Docker, it is responsible for all the computation part.
+
 Since the hpe modules is accelerated with TensorRT engines that requires to be built on the target machine, one can choose between two alternatives:
 - Create a Conda Environment as detailed below and build the engines following the scripts [in this folder](modules/hpe/setup)
 - Build the Docker image contained in the Dockerfile and use the provided engines
