@@ -53,6 +53,7 @@ class ISBFSAR:
         self.last_poses = []
         self.skeleton_scale = args.skeleton_scale
         self.acquisition_time = args.acquisition_time
+        self.edges = None
 
     def get_frame(self, img=None, log=None):
         """
@@ -94,15 +95,16 @@ class ISBFSAR:
         if self.input_type == "hybrid" or self.input_type == "skeleton":
             if hpe_res is not None:
                 pose, edges, bbox = hpe_res['pose'], hpe_res['edges'], hpe_res['bbox']
+                if self.edges is None:
+                    self.edges = edges
                 if pose is not None:
+                    elements["distance"] = np.sqrt(np.sum(np.square(np.array([0, 0, 0]) - np.array(pose[0])))) * 2.5
                     pose = pose - pose[0, :]
                     elements["pose"] = pose
                     ar_input["sk"] = pose.reshape(-1)
                 elements["edges"] = edges
                 if bbox is not None:
                     elements["bbox"] = bbox
-                if pose is not None:
-                    elements["distance"] = np.sqrt(np.sum(np.square(np.array([0, 0, 0]) - np.array(pose[0])))) * 2
 
         # Make inference
         results = self.ar.inference(ar_input)
@@ -209,14 +211,31 @@ class ISBFSAR:
 
     def debug(self):
         ss = self.ar.support_set
-        ss = np.stack([ss[c]["imgs"].detach().cpu().numpy() for c in ss.keys()])
-        ss = ss.swapaxes(-2, -3).swapaxes(-1, -2)
-        ss = (ss - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
-        ss = (ss * 255).astype(np.uint8)
-        n = len(ss)
-        cv2.imshow("support_set",
-                   cv2.resize(ss.swapaxes(0, 1).reshape(8, 224 * n, 224, 3).swapaxes(0, 1).reshape(n * 224, 8 * 224, 3),
-                              (640, 96 * len(ss))))
+        if self.input_type in ["hybrid", "imgs"]:
+            ss = np.stack([ss[c]["imgs"].detach().cpu().numpy() for c in ss.keys()])
+            ss = ss.swapaxes(-2, -3).swapaxes(-1, -2)
+            ss = (ss - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
+            ss = (ss * 255).astype(np.uint8)
+            n = len(ss)
+            cv2.imshow("support_set_RGB",
+                       cv2.resize(ss.swapaxes(0, 1).reshape(8, 224 * n, 224, 3).swapaxes(0, 1).reshape(n * 224, 8 * 224, 3),
+                                  (640, 96 * len(ss))))
+        if self.input_type in ["hybrid", "skeleton"]:
+            ss = np.stack([ss[c]["poses"].detach().cpu().numpy() for c in ss.keys()])
+            ss = ss.reshape(ss.shape[:-1]+(30, 3))
+            size = 100
+            visual = np.zeros((size*ss.shape[0], size*ss.shape[1]))
+            ss = (ss + 1)*(size/2)  # Send each pose from [-1, +1] to [0, size]
+            ss = ss[..., :2]
+            ss[..., 1] += np.arange(ss.shape[0])[..., None, None].repeat(ss.shape[1], axis=1)*size
+            ss[..., 0] += np.arange(ss.shape[1])[None, ..., None].repeat(ss.shape[0], axis=0)*size
+            ss = ss.reshape(-1, 30, 2).astype(int)
+            for pose in ss:
+                for point in pose:
+                    visual = cv2.circle(visual, point, 1, (255, 0, 0))
+                for edge in self.edges:
+                    visual = cv2.line(visual, pose[edge[0]], pose[edge[1]], (255, 0, 0))
+            cv2.imshow("support_set_SK", visual)
         cv2.waitKey(0)
 
     def learn_command(self, flag):

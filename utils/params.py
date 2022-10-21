@@ -68,7 +68,7 @@ class TRXConfig(object):
         self.start_discriminator_after_epoch = 0  # self.n_epochs  # TODO CAREFUL
         self.first_mile = self.n_epochs  # 15 TODO CAREFUL
         self.second_mile = self.n_epochs  # 1500 TODO CAREFUL
-        self.n_workers = 0 if not ubuntu else 32
+        self.n_workers = 0 if not ubuntu else 16
         self.log_every = 10 if not ubuntu else 1000
         self.eval_every_n_epoch = 10
 

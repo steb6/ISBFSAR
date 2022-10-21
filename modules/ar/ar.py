@@ -65,10 +65,6 @@ class ActionRecognizer:
                 ss["rgb"] = torch.stack([self.support_set[c]["imgs"] for c in self.support_set.keys()]).unsqueeze(0)
             if self.input_type in ["skeleton", "hybrid"]:
                 ss["sk"] = torch.stack([self.support_set[c]["poses"] for c in self.support_set.keys()]).unsqueeze(0)
-            # for i in ss.keys():  # Pad supports  TODO TRY TO REMOVE THIS
-            #     pad = torch.zeros_like(ss[i][:, 0].unsqueeze(1))
-            #     while ss[i].shape[1] < 5:
-            #         ss[i] = torch.concat((ss[i], pad), dim=1)
         with torch.no_grad():
             outputs = self.ar(ss, labels, data, ss_features=ss_f)  # RGB, POSES
 

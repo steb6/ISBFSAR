@@ -92,19 +92,19 @@ class VISPYVisualizer:
         self.fps = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
                         font_size=12, pos=(0.75, 0.9))
         self.b2.add(self.fps)
+        # Actions (LABEL OF INFO)
         self.fsscore = Text('fs score', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
-                            font_size=12, pos=(0.5, 0.75))
+                            font_size=12, pos=(5/8, 0.75))
         self.b2.add(self.fsscore)
         self.osscore = Text('os score', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
-                            font_size=12, pos=(0.75, 0.75))
+                            font_size=12, pos=(7/8, 0.75))
         self.b2.add(self.osscore)
-
-        # self.is_same_action = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
-        #                            font_size=12, pos=(0.75, 0.7))
-        # self.b2.add(self.is_same_action)
+        self.fsscore = Text('rf', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
+                            font_size=12, pos=(7/16, 0.75))
+        self.b2.add(self.fsscore)
         self.os_score = scene.visuals.Rectangle(center=(2, 2), color="white", border_color="white", height=0.1)
         self.b2.add(self.os_score)
-
+        # Actions
         self.focuses = {}
         self.actions = {}
         self.values = {}
@@ -215,43 +215,44 @@ class VISPYVisualizer:
             self.focus.color = "red"
         self.fps.text = "FPS: {:.2f}".format(fps)
         self.distance.text = "DIST: {:.2f}m".format(distance) if distance is not None else "DIST:"
-
         # Actions
         m = max(results.values()) if len(results) > 0 else 0  # Just max
         for i, action in enumerate(results.keys()):
             score = results[action]
-            # Actions
-            if action in self.actions.keys():
-                text = action  # {:.2f}".format(r, score)
+            if action in self.actions.keys():  # Action was already in SS
+                text = action
                 self.actions[action].text = text
-                self.values[action].width = score * 0.33
-                self.actions[action].pos = (1 / 6, 0.6 - (0.1 * i))
-                self.values[action].center = (2 / 6 + ((score * 0.33) / 2), 0.6 - (0.1 * i))
+                self.values[action].width = score*0.25
+                self.actions[action].pos = (3/16, 0.6 - (0.1 * i))
+                self.values[action].center = (4/8 + ((score*0.25) / 2), 0.6 - (0.1 * i))
                 self.values[action].color = get_color(score)
                 self.values[action].border_color = get_color(score)
                 if action in self.focuses.keys():
                     self.focuses[action].color = 'red' if not focus else 'green'
-            else:
+                    self.focuses[action].border_color = 'red' if not focus else 'green'
+            else:  # Action must be added in SS
                 # Action label
                 self.actions[action] = Text('', rotation=0, anchor_x="center", anchor_y="center", font_size=12,
-                                            pos=(1 / 6, 0.6 - (0.1 * i)), color="white")
+                                            pos=(3/16, 0.6 - (0.1 * i)), color="white")
                 self.b2.add(self.actions[action])
                 # Few Shot Label
                 self.values[action] = scene.visuals.Rectangle(
-                    center=(3 / 6 + ((score * 0.33) / 2), 0.6 - (0.1 * i)),
+                    center=(4/8 + ((score*0.25) / 2), 0.6 - (0.1 * i)),
                     color=get_color(score), border_color=get_color(score), height=0.1,
-                    width=score * 0.33)
+                    width=score*0.25)
                 self.b2.add(self.values[action])
                 # Eye for focus
                 if requires_focus[action]:
-                    self.focuses[action] = Text('0.0', rotation=0, anchor_x="center", anchor_y="center", font_size=12,
-                                                pos=(1 / 24, 0.6 - (0.1 * i)), color="white")
+                    self.focuses[action] = scene.visuals.Rectangle(center=(7/16, 0.6 - (0.1 * i)),
+                                                                   color='red' if not focus else 'green',
+                                                                   border_color='red' if not focus else 'green',
+                                                                   height=0.1, width=0.05)
                     self.b2.add(self.focuses[action])
             # Os score
             self.actions[action].color = "white"
             if score == m:
-                self.os_score.width = is_true * 0.33
-                self.os_score.center = [(4 / 6) + ((is_true * 0.33) / 2), 0.6 - (0.1 * i)]
+                self.os_score.width = is_true*0.25
+                self.os_score.center = [(6/8) + ((is_true*0.25) / 2), 0.6 - (0.1 * i)]
                 self.os_score.color = get_color(is_true)
                 self.os_score.border_color = get_color(is_true)
                 if is_true > 0.66:
@@ -272,6 +273,8 @@ class VISPYVisualizer:
             if key in self.focuses.keys():
                 self.focuses[key].parent = None
                 self.focuses[key].pop(key)
+        if len(self.actions) == 0:
+            self.os_score.center = (2, 2)
 
     def on_draw(self, event):
         pass
