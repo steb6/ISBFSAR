@@ -211,6 +211,8 @@ class ISBFSAR:
 
     def debug(self):
         ss = self.ar.support_set
+        if len(ss) == 0:
+            return
         if self.input_type in ["hybrid", "imgs"]:
             ss = np.stack([ss[c]["imgs"].detach().cpu().numpy() for c in ss.keys()])
             ss = ss.swapaxes(-2, -3).swapaxes(-1, -2)

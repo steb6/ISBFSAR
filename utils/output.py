@@ -272,7 +272,7 @@ class VISPYVisualizer:
             self.values.pop(key)
             if key in self.focuses.keys():
                 self.focuses[key].parent = None
-                self.focuses[key].pop(key)
+                self.focuses.pop(key)
         if len(self.actions) == 0:
             self.os_score.center = (2, 2)
 
