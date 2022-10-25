@@ -1,8 +1,5 @@
 import copy
-import os
 import pickle
-import time
-
 from modules.hpe.utils.misc import postprocess_yolo_output, homography, get_augmentations, is_within_fov, reconstruct_absolute
 import einops
 import numpy as np
@@ -228,29 +225,35 @@ class HumanPoseEstimator:
 
 
 if __name__ == "__main__":
+    import pycuda.autoinit  # IMPORTANT leave this here! It creates the context for CUDA
     args = MainConfig()
     vis = MPLPosePrinter()
 
     h = HumanPoseEstimator(MetrabsTRTConfig(), RealSenseIntrinsics())
 
-    cap = RealSense(width=args.cam_width, height=args.cam_height)
-    # cap = cv2.VideoCapture(2)
-    # cap = cv2.VideoCapture('assets/test_gaze_no_mask.mp4')
+    # cap = RealSense(width=args.cam_width, height=args.cam_height)  # RealSense
+    cap = cv2.VideoCapture(0)  # Webcam
 
     for _ in tqdm(range(10000)):
-    # while True:
         ret, img = cap.read()
-        # img = img[..., ::-1]
-        # cv2.imshow("img", img)
-        # img = img[:, 240:-240, :]
-        # img = cv2.resize(img, (640, 480))
-        p, e, _ = h.estimate(img)
+        res = h.estimate(img)
+        p = res["pose"]
+        e = res["edges"]
+        b = res["bbox"]
 
         if p is not None:
-            # p = p * 2200
-            dist = np.linalg.norm(p[0])
-            print(dist)
-            # p = p - p[0]
+            p = p - p[0]
             vis.clear()
             vis.print_pose(p, e)
             vis.sleep(0.001)
+
+        if b is not None:
+            x1, x2, y1, y2 = b
+            xm = int((x1 + x2) / 2)
+            ym = int((y1 + y2) / 2)
+            l = max(xm - x1, ym - y1)
+            img = img[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
+            img = cv2.resize(img, (224, 224))
+
+        cv2.imshow("", img)
+        cv2.waitKey(1)
