@@ -1,19 +1,34 @@
-# MetrABS 16 fps
-This repository contains all the steps necessary to run [MetrABS](https://github.com/isarandi/metrabs) at 16 fps with a GPU on Windows.
-
-## Description
-This is obtained by using a third party Human Detector [Yolov4](https://github.com/Tianxiaomo/pytorch-YOLOv4) and by accelerating with [TensorRT](https://developer.nvidia.com/tensorrt) the inference of both the detector and the BackBone.
-The weight and bias of the final convolution are extracted and applied on the CPU.
+# Human Pose Estimator
+This module contains a fast version of [Yolov4](https://github.com/Tianxiaomo/pytorch-YOLOv4) for Human Detection and a fast version of a truncation-resistant 3D absolute Human Pose Estimator [MetrABS](https://github.com/isarandi/metrabs).
+All steps are accelerated with [TensorRT](https://developer.nvidia.com/tensorrt).
 Note that this implementation is completely independent of PyTorch and TensorFlow since all the modules are transformed into ONNX and then TensorRT engines.
 
-## Preparation
-In order to run the `metrabs_trt.py` script, some steps are needed
-In the [setup](modules/hpe/setup) directory you can find five scripts which guide you in the following steps:
-1. Download and extract the ONNX of Yolov4
-2. Download and extract the BackBone of MetrABS with full signature and extract the weight and bias of the final convolution
-3. Extract the ONNX of the BackBone
-4. Create the ONNX of the function `image_transformation` (note: this function was part of the `tensorflow_addons` package, but since we want to avoid Tensorflow in deployment and since this function performs a lot of computation, I reimplemented it in PyTorch)
-5. Create the TensorRT engines of Yolo, the BackBone and the `image_transformation` function
+## Installation
+Since this module is accelerated with TensorRT engines that works only on the right environment, one can choose between two alternatives:
+- Create a Conda Environment and build the engines as detailed below
+- Build the Docker image contained in the Dockerfile and use the provided engines
 
-## Run
-In order to make inference, just start the [hpe.py](modules/hpe/hpe.py) script. You can change the parameters in the [configuration file](utils/params.py).
+<span style="color:red">*NOTE*</span>: The Docker option is strongly recommended, since it doesn't require the creation of the engines (that takes over an hour), and performances and engines creation may be different in another system.
+Anyway, if you really plan to use this module, recreate the engines is the best option.
+
+### Run with Docker
+Install Docker on your system.
+Then build the image with:
+
+`docker build -t ecub .`
+
+Download the engines from here and place them in [modules/hpe/weights/engines/docker](modules/hpe/weights/engines/docker).
+After that, you can test the installation launching the following command in a terminal/prompt inside the root directory of the project (replace _PATH_ with _%cd%_ in Windows or _{$pwd}_ on Ubuntu):
+
+`docker run -it --rm --gpus=all -v "PATH":/home/ecub ecub:latest python modules/hpe/hpe.py`
+
+
+### Engines creation
+In the [setup](modules/hpe/setup) directory there are some scripts which guide you in the following steps:
+1. Download and extract the ONNX of Yolov4
+2. Download and extract the BackBone of MetrABS with full signature and extract the weight and bias of the Heads
+3. Extract the ONNX of the BackBone and the Heads
+4. Create the ONNX of the function _image_transformation_, that performs a homography between Yolo and MetrABS
+5. Create the TensorRT engines of Yolo, the BackBone, the _image_transformation_ function and the Heads
+
+After that, you can test the installation with `python modules/hpe/hpe.py`.

@@ -22,25 +22,12 @@ The program is divided into two parts:
 - [source.py](source.py) runs on the host machine, it connects to the RealSense (or webcam), it provides frames to [main.py](main.py), it visualizes the results with the [VISPYVisualizer](utils/output.py)
 - [main.py](main.py) runs either in a Conda environment or in a Docker, it is responsible for all the computation part.
 
-Since the hpe modules is accelerated with TensorRT engines that requires to be built on the target machine, one can choose between two alternatives:
-- Create a Conda Environment as detailed below and build the engines following the scripts [in this folder](modules/hpe/setup)
-- Build the Docker image contained in the Dockerfile and use the provided engines
+Since the hpe modules is accelerated with TensorRT engines that requires to be built on the target machine, we provide the engines build over the Dockerfile, that allows for a fast installation.
+Check [here](modules/hpe/README.md) the instruction to install the Human Pose Estimation module.
 
-### Run with Conda
-Create a Conda environment and install the following packages:
-1) `conda install -c conda-forge opencv`
-2) `conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch`
-3) `conda install -c conda-forge matplotlib`
-4) `pip install tensorflow`
-5) `conda install -c conda-forge scipy`
-
-Then, run the following processes together:
-
-`python manager.py`
-`python main.py`
-`python source.py`
 
 ### Run with Docker
+Follow the instruction inside the README.md of every module: [hpe](modules/hpe/README.md), [ar](modules/ar/README.md), and [focus](modules/focus/README.md).
 Install [Vispy](https://github.com/vispy/vispy) and [pyrealsense2](https://pypi.org/project/pyrealsense2/) and build the Docker image with:
 
 `docker build -t ecub .`
@@ -50,10 +37,6 @@ To run, start two separate processes:
 `python manager.py`
 `python source.py`
 
-Access the Docker image with
+Launch the main script with the following command (replace _PATH_ with _%cd%_ in Windows or _{$pwd}_ on Ubuntu):
 
-`docker run -it --rm --gpus=all -v "path_to_cloned_repository":/home/ecub ecub:latest /bin/bash`
-
-and then run
-
-`python main.py`
+`docker run -it --rm --gpus=all -v "PATH":/home/ecub ecub:latest python main.py`
