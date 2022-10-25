@@ -13,11 +13,11 @@ Anyway, if you really plan to use this module, recreate the engines is the best 
 
 ### Run with Docker
 Install Docker on your system.
-Then build the image with:
+Then, build the image launching the following command in a terminal/prompt inside the root directory of the project:
 
 `docker build -t ecub .`
 
-Download the engines from here and place them in [modules/hpe/weights/engines/docker](modules/hpe/weights/engines/docker).
+Download the engines from [here](https://drive.google.com/file/d/1iN3pL7WLgW-Gusc8Ou2NpUtYpTEFAhhM/view?usp=sharing) and place them inside [modules/hpe/weights/engines/docker](modules/hpe/weights/engines/docker).
 After that, you can test the installation launching the following command in a terminal/prompt inside the root directory of the project (replace _PATH_ with _%cd%_ in Windows or _{$pwd}_ on Ubuntu):
 
 `docker run -it --rm --gpus=all -v "PATH":/home/ecub ecub:latest python modules/hpe/hpe.py`
