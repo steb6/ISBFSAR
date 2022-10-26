@@ -24,7 +24,7 @@ After that, you can test the installation launching the following command in a t
 
 
 ### Engines creation
-In the [setup](modules/hpe/setup) directory there are some scripts which guide you in the following steps:
+In the [setup](setup) directory there are some scripts which guide you in the following steps:
 1. Download and extract the ONNX of Yolov4
 2. Download and extract the BackBone of MetrABS with full signature and extract the weight and bias of the Heads
 3. Extract the ONNX of the BackBone and the Heads
