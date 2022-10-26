@@ -23,6 +23,7 @@ The program is divided into two parts:
 - [main.py](main.py) runs either in a Conda environment or in a Docker, it is responsible for all the computation part.
 
 ![](assets/Immagine1.png)
+
 Since the hpe modules is accelerated with TensorRT engines that requires to be built on the target machine, we provide the engines build over the Dockerfile, that allows for a fast installation.
 Check [here](modules/hpe/README.md) the instruction to install the Human Pose Estimation module.
 
