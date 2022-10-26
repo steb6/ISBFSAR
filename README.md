@@ -22,7 +22,7 @@ The program is divided into two parts:
 - [source.py](source.py) runs on the host machine, it connects to the RealSense (or webcam), it provides frames to [main.py](main.py), it visualizes the results with the [VISPYVisualizer](utils/output.py)
 - [main.py](main.py) runs either in a Conda environment or in a Docker, it is responsible for all the computation part.
 
-![](../../Desktop/Immagine1.png)
+![](assets/Immagine1.png)
 Since the hpe modules is accelerated with TensorRT engines that requires to be built on the target machine, we provide the engines build over the Dockerfile, that allows for a fast installation.
 Check [here](modules/hpe/README.md) the instruction to install the Human Pose Estimation module.
 
