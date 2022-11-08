@@ -1,7 +1,7 @@
 import platform
 import torch.optim
 from torchvision import transforms
-from modules.focus.mutual_gaze.focus_detection.utils.MARIADataset import MARIAData
+from modules.focus.mutual_gaze.focus_detection.utils.my_dataloader import MARIAData
 from modules.focus.mutual_gaze.focus_detection.utils.model import MutualGazeDetectorHeads as Model
 from tqdm import tqdm
 from sklearn import metrics
@@ -22,8 +22,7 @@ if __name__ == "__main__":
 
     config = MutualGazeConfig()
     sess = 0
-    dataset = "D:/datasets/useless/"+config.dataset if is_local else "../"+config.dataset
-    test_data = MARIAData(dataset, mode="test", split_number=sess)
+    test_data = MARIAData(config.data_path, mode="test", split_number=sess)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=32,
                                               num_workers=2 if is_local else 2)
 

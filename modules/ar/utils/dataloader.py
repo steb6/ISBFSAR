@@ -13,7 +13,8 @@ from utils.params import seq_len, ubuntu
 
 class MyLoader(data.Dataset):
     def __init__(self, queries_path, k=5, n_task=10000, max_l=16, l=8, input_type="hybrid",
-                 exemplars_path=None, support_classes=None, query_class=None):
+                 exemplars_path=None, support_classes=None, query_class=None,
+                 skeleton="smpl+head_30"):
         """
         Loader class that provides all the functionality needed for training and testing
         @param queries_path: path to main dataset
@@ -46,6 +47,12 @@ class MyLoader(data.Dataset):
             self.n_task = len(self.queries)
         self.default_sample = None
 
+        self.skeleton = skeleton
+        with open(f'assets/skeleton_types.pkl', "rb") as input_file:
+            skeleton_types = pickle.load(input_file)
+        self.edges = skeleton_types[skeleton]['edges']
+        self.indices = skeleton_types[skeleton]['indices']
+
     def get_sample(self, class_name, ss=False, path=None):
         original_path = path
         if not path:
@@ -65,7 +72,7 @@ class MyLoader(data.Dataset):
                     with open(os.path.join(path, f"{i}.pkl"), 'rb') as file:
                         # Load skeleton
                         pose = pickle.load(file)
-                    poses.append(pose.reshape(-1))
+                    poses.append(pose[self.indices].reshape(-1))
                 # Load image
                 if self.input_type in ["rgb", "hybrid"]:
                     img = cv2.imread(os.path.join(path, f"{i}.png"))
@@ -121,80 +128,14 @@ class MyLoader(data.Dataset):
         return self.n_task
 
 
-class EpisodicLoader(data.Dataset):
-    def __init__(self, path, k=5, n_task=10000, l=16, input_type="hybrid"):
-        self.path = path
-        self.k = k
-        self.n_task = n_task
-        self.l = l
-        self.input_type = input_type
-        self.classes = next(os.walk(self.path))[1]  # Get list of directories
-
-    def get_random_sample(self, class_name):
-        sequences = next(os.walk(os.path.join(self.path, class_name)))[1]  # Just list of directories
-
-        path = random.sample(sequences, 1)[0]  # Get first random file
-        path = os.path.join(self.path, class_name, path)  # Create full path
-        imgs = []
-        poses = []
-        i = 0
-        while True:  # Load one image at time
-            try:
-                with open(os.path.join(path, f"{i}.pkl"), 'rb') as file:
-                    # Load skeleton
-                    pose = pickle.load(file)
-                    poses.append(pose.reshape(-1))
-                    # Load image
-                    img = cv2.imread(os.path.join(path, f"{i}.png"))
-                    img = cv2.resize(img, (224, 224))
-                    img = img / 255.
-                    img = img * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
-                    imgs.append(img.swapaxes(-1, -2).swapaxes(-2, -3))
-                    i += 1
-                if len(poses) == self.l:
-                    break
-            except Exception as e:
-                print("[ERROR]: Erase this directory:", path, e)
-                # Reset
-                path = random.sample(sequences, 1)[0]  # Get first random file
-                path = os.path.join(self.path, class_name, path)  # Create full path
-                imgs = []
-                poses = []
-                i = 0
-        if seq_len == 8:
-            return np.stack(imgs)[list(range(0, 16, 2))], np.stack(poses)[list(range(0, 16, 2))]
-        return np.stack(imgs), np.stack(poses)
-
-    def __getitem__(self, _):  # Must return complete, imp_x and impl_y
-        support_classes = random.sample(self.classes, self.k)
-        target_class = random.sample(support_classes, 1)[0]
-        unknown_class = random.sample([x for x in self.classes if x not in support_classes], 1)[0]
-
-        support_set = [self.get_random_sample(cl) for cl in support_classes]
-        target_set = self.get_random_sample(target_class)
-        unknown_set = self.get_random_sample(unknown_class)
-
-        return {'support_set': {"rgb": np.stack([x[0] for x in support_set]),
-                                "sk": np.stack([x[1] for x in support_set])},
-                'target_set': {"rgb": target_set[0],
-                               "sk": target_set[1]},
-                'unknown_set': {"rgb": unknown_set[0],
-                                "sk": unknown_set[1]},
-                'support_classes': np.stack([self.classes.index(elem) for elem in support_classes]),
-                'target_class': self.classes.index(target_class),
-                'unknown_class': self.classes.index(unknown_class)}
-
-    def __len__(self):
-        return self.n_task
-
-
 class FSOSEpisodicLoader(data.Dataset):
     """
     Loader used to compute FSOS score and similarity matrix.
     For FSOS, pass query path, exemplars path and a list of classes s.t. their exemplars are added inside ss.
     To compute similarity matrix for discriminator, just put one element in support classes and pass query class
     """
-    def __init__(self, queries_path, exemplars_path, support_classes, l=16, input_type="hybrid", query_class=None):
+    def __init__(self, queries_path, exemplars_path, support_classes, l=16, input_type="hybrid", query_class=None,
+                 skeleton="smpl+head_30"):
         self.queries_path = queries_path
         self.exemplars_path = exemplars_path
         self.all_test_classes = next(os.walk(self.exemplars_path))[1]
@@ -210,6 +151,11 @@ class FSOSEpisodicLoader(data.Dataset):
                 self.queries.append(os.path.join(queries_path, q, class_dir))
         self.support_set = [self.load_sample(os.path.join(self.exemplars_path, cl, "0")) for cl in self.support_classes]
         self.tapullo = None
+        self.skeleton = skeleton
+        with open(f'assets/{self.skeleton}.pkl', "rb") as input_file:
+            skeleton_types = pickle.load(input_file)
+        self.edges = skeleton_types[skeleton]['edges']
+        self.indices = skeleton_types[skeleton]['indices']
 
     def load_sample(self, path):
         imgs = []
@@ -219,7 +165,7 @@ class FSOSEpisodicLoader(data.Dataset):
             with open(os.path.join(path, f"{i}.pkl"), 'rb') as file:
                 # Load skeleton
                 pose = pickle.load(file)
-                poses.append(pose.reshape(-1))
+                poses.append(pose.reshape(-1)[self.indices])
                 # Load image
                 img = cv2.imread(os.path.join(path, f"{i}.png"))
                 img = cv2.resize(img, (224, 224))
@@ -263,11 +209,6 @@ if __name__ == "__main__":
     from utils.matplotlib_visualizer import MPLPosePrinter
     from utils.params import TRXConfig
 
-    skeleton = 'smpl+head_30'
-    with open('assets/skeleton_types.pkl', "rb") as input_file:
-        skeleton_types = pickle.load(input_file)
-    edges = skeleton_types[skeleton]['edges']
-
     loader = MyLoader(TRXConfig().data_path, input_type="hybrid")
     vis = MPLPosePrinter()
 
@@ -277,11 +218,12 @@ if __name__ == "__main__":
         unk = asd['unknown_set']
 
         print(asd['support_classes'])
-        for c in range(5):
-            for k in range(16):
-                cv2.imshow("sup", sup[c][0][k])
+        n_classes, n_frames, _ = sup["sk"].shape
+        for c in range(n_classes):
+            for k in range(n_frames):
+                cv2.imshow("sup", sup["rgb"][c][k].swapaxes(0, 1).swapaxes(1, 2))
                 cv2.waitKey(1)
 
                 vis.clear()
-                vis.print_pose(sup[c][1][k], edges)
+                vis.print_pose(sup["sk"][c][k].reshape(-1, 3), loader.edges)
                 vis.sleep(0.01)

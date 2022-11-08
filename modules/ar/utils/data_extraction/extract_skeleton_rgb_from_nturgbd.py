@@ -7,9 +7,10 @@ from tqdm import tqdm
 from modules.hpe.hpe import HumanPoseEstimator
 from utils.matplotlib_visualizer import MPLPosePrinter
 from utils.params import MetrabsTRTConfig, RealSenseIntrinsics
+import pycuda.autoinit
 
-in_dataset_path = "D:\\datasets\\useless\\nturgbd"
-out_dataset_path = "D:\\datasets\\test"
+in_dataset_path = "D:\\datasets\\nturgbd\\videos"
+out_dataset_path = "D:\\datasets\\NTURGBD_to_YOLO_METRO_122"
 classes_path = "assets/nturgbd_classes.txt"
 n = 16
 
@@ -41,14 +42,14 @@ if __name__ == "__main__":
         class_dict[index] = name
 
     # Create output directories
-    # if os.path.exists(out_dataset_path):
-    #     shutil.rmtree(out_dataset_path)
-    # os.mkdir(out_dataset_path)
-    # for i, value in enumerate(list(class_dict.values())):
-    #     if 0 <= i <= 49-1 or 61-1 <= i <= 105-1:
-    #         if os.path.exists(os.path.join(out_dataset_path, value)):
-    #             shutil.rmtree(os.path.join(out_dataset_path, value))
-    #         os.mkdir(os.path.join(out_dataset_path, value))
+    if os.path.exists(out_dataset_path):
+        shutil.rmtree(out_dataset_path)
+    os.mkdir(out_dataset_path)
+    for i, value in enumerate(list(class_dict.values())):
+        if 0 <= i <= 49-1 or 61-1 <= i <= 105-1:
+            if os.path.exists(os.path.join(out_dataset_path, value)):
+                shutil.rmtree(os.path.join(out_dataset_path, value))
+            os.mkdir(os.path.join(out_dataset_path, value))
 
     # In this way, we can continue the extraction without losing data
     class_offset = {}
@@ -89,7 +90,7 @@ if __name__ == "__main__":
                         frames.append(frame)
                         ret, frame = video.read()
                     if len(frames) < n:
-                        continue
+                        raise Exception("Video", full, "didn't have enough frames")
 
                     # Select just n frames
                     n_frames = len(frames) - (len(frames) % n)
@@ -101,7 +102,7 @@ if __name__ == "__main__":
                     # Iterate over all frames
                     poses = []
                     images = []
-                    res = np.zeros([30, 3])  # So if the first pose is none, there is no error
+                    res = np.zeros([122, 3])  # So if the first pose is none, there is no error
 
                     for i, frame in enumerate(frames):
                         frame = frame[:, 240:-240, :]

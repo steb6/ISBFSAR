@@ -2,6 +2,7 @@ import platform
 import os
 
 input_type = "skeleton"  # rgb, skeleton or hybrid
+skeleton_type = 'smpl+head_30'
 
 docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
 seq_len = 8 if input_type != "skeleton" else 16
@@ -29,7 +30,7 @@ class MetrabsTRTConfig(object):
         self.heads_engine_path = os.path.join('modules', 'hpe', 'weights', engine_dir, 'heads1.engine')
         self.expand_joints_path = 'assets/32_to_122.npy'
         self.skeleton_types_path = 'assets/skeleton_types.pkl'
-        self.skeleton = 'smpl+head_30'
+        self.skeleton = skeleton_type
         self.yolo_thresh = 0.3
         self.nms_thresh = 0.7
         self.num_aug = 0  # if zero, disables test time augmentation
@@ -54,9 +55,11 @@ class TRXConfig(object):
         self.way = 5
         self.shot = 1
         self.device = 'cuda'
+        self.skeleton_type = skeleton_type
 
         # CHOICE DATASET
-        self.data_path = "D:\\datasets\\NTURGBD_to_YOLO_METRO" if not ubuntu else "../datasets/NTURGBD_to_YOLO_METRO"
+        data_name = "NTURGBD_to_YOLO_METRO_122"
+        self.data_path = f"D:\\datasets\\{data_name}" if not ubuntu else f"../datasets/{data_name}"
         self.n_joints = 30
 
         # TRAINING
@@ -131,16 +134,17 @@ class FocusConfig:
 
 class MutualGazeConfig:
     def __init__(self):
+        self.data_path = 'D:/datasets/mutualGaze_dataset' if not ubuntu else "/home/IIT.LOCAL/sberti/datasets/mutualGaze_dataset"
         self.head_model = 'modules/focus/mutual_gaze/head_detection/epoch_0.pth'
         self.focus_model = 'modules/focus/mutual_gaze/focus_detection/checkpoints/sess_0_f1_1.00.pth'
+        self.ckpts_path = 'modules/focus/mutual_gaze/focus_detection/checkpoints'
 
         self.augmentation_size = 0.8
         self.dataset = "focus_dataset_heads"
         self.model = "facenet"  # facenet, resnet
 
         self.batch_size = 8
-        self.lr = 1e-6  # TODO TRY TO REDUCE LEARNING RATE
+        self.lr = 1e-6
         self.log_every = 10
         self.pretrained = True
         self.n_epochs = 1000
-        self.patience = 100
