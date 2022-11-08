@@ -1,14 +1,14 @@
 import copy
 import pickle
-from ISBFSAR.modules.hpe.utils.misc import postprocess_yolo_output, homography, get_augmentations, is_within_fov, \
+from modules.hpe.utils.misc import postprocess_yolo_output, homography, get_augmentations, is_within_fov, \
     reconstruct_absolute
 import einops
 import numpy as np
-from ISBFSAR.utils.tensorrt_runner import Runner
-from ISBFSAR.utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig
+from utils.tensorrt_runner import Runner
+from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig
 from tqdm import tqdm
 import cv2
-from ISBFSAR.utils.matplotlib_visualizer import MPLPosePrinter
+from utils.matplotlib_visualizer import MPLPosePrinter
 
 
 class HumanPoseEstimator:

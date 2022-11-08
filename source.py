@@ -20,7 +20,7 @@ Output: elements for VISPY to visualize (output_queue.send())
 if __name__ == '__main__':
     multiprocessing.current_process().name = 'Source'
 
-    processes: Dict[str, Union[Queue, None]] = {'src_to_sink': None, 'sink_to_src': None}
+    processes: Dict[str, Union[Queue, None]] = {'source_human': None, 'human_sink': None}
 
     BaseManager.register('get_queue')
     manager = BaseManager(address=('localhost', 50000), authkey=b'abracadabra')
@@ -48,7 +48,7 @@ if __name__ == '__main__':
         elems['msg'] = '' if vispy_in_q.empty() else copy.deepcopy(vispy_in_q.get())
 
         # Send to main
-        processes['src_to_sink'].put(elems)
+        processes['source_human'].put(elems)
 
         # Send results to visualizer
-        vispy_out_q.put(processes['sink_to_src'].get())
+        vispy_out_q.put(processes['human_sink'].get())

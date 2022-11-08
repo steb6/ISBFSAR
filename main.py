@@ -1,4 +1,4 @@
-import tensorrt  # Leave this here, such that pytorch import the right tensorrt
+# import tensorrt  # Leave this here, such that pytorch import the right tensorrt
 import pickle as pkl
 from multiprocessing.managers import BaseManager
 from modules.focus.gaze_estimation.focus import FocusDetector
@@ -10,8 +10,8 @@ from modules.ar.ar import ActionRecognizer
 import cv2
 from playsound import playsound
 from modules.hpe.hpe import HumanPoseEstimator
-from ISBFSAR.utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig, FocusConfig
-from ISBFSAR.utils.params import TRXConfig
+from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig, FocusConfig
+from utils.params import TRXConfig
 from multiprocessing import Process, Queue
 
 
