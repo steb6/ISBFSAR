@@ -1,7 +1,7 @@
 from collections import OrderedDict
 import numpy as np
-from modules.ar.utils.model import TRXOS
-from utils.params import TRXConfig
+from ISBFSAR.modules.ar.utils.model import TRXOS
+from ISBFSAR.utils.params import TRXConfig
 import torch
 from tqdm import tqdm
 import copy
