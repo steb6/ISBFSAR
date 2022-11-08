@@ -5,7 +5,6 @@ from itertools import combinations
 from torch.autograd import Variable
 from torchvision.models import resnet50, ResNet
 from torchvision.models.resnet import Bottleneck, resnet18
-from utils.params import ubuntu
 
 NUM_SAMPLES = 1
 

@@ -1,3 +1,4 @@
+import tensorrt  # Leave this here, such that pytorch import the right tensorrt
 import pickle as pkl
 from multiprocessing.managers import BaseManager
 from modules.focus.gaze_estimation.focus import FocusDetector
@@ -9,8 +10,8 @@ from modules.ar.ar import ActionRecognizer
 import cv2
 from playsound import playsound
 from modules.hpe.hpe import HumanPoseEstimator
-from utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig, FocusConfig
-from utils.params import TRXConfig
+from ISBFSAR.utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig, FocusConfig
+from ISBFSAR.utils.params import TRXConfig
 from multiprocessing import Process, Queue
 
 
@@ -42,8 +43,8 @@ class ISBFSAR:
         BaseManager.register('get_queue')
         manager = BaseManager(address=("host.docker.internal" if docker else "localhost", 50000), authkey=b'abracadabra')
         manager.connect()
-        self._in_queue = manager.get_queue('src_to_sink')  # To get rgb or msg
-        self._out_queue = manager.get_queue('sink_to_src')  # To send element to VISPY
+        self._in_queue = manager.get_queue('source_human')  # To get rgb or msg
+        self._out_queue = manager.get_queue('human_sink')  # To send element to VISPY
 
         # Variables
         self.cam_width = args.cam_width
@@ -141,7 +142,7 @@ class ISBFSAR:
             log = None
             data = self._in_queue.get()
 
-            if data["msg"] != '':
+            if "msg" in data.keys() and data["msg"] != '':
 
                 msg = data["msg"]
                 msg = msg.strip()
@@ -172,7 +173,6 @@ class ISBFSAR:
                     self.debug()
                 else:
                     log = "Not a valid command!"
-
             self.get_frame(img=data["rgb"], log=log)
 
     # def test_video(self, path):
